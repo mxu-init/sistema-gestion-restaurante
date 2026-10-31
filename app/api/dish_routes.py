@@ -55,6 +55,11 @@ def create_dish(
     if file:
         try:
             image_url = image_service.save_dish_image(file)
+        except ValueError as error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(error)
+            )
         except Exception:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
