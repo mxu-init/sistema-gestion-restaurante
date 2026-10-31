@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from typing import Optional
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.models.dish_model import DishModel, CategoryModel
 from app.schemas.dish_schema import DishCreate, DishUpdate
@@ -9,13 +10,20 @@ def check_category_exists(db: Session, category_id: int) -> bool:
 
 def get_active_dish_by_name_and_category(db: Session, name: str, category_id: int) -> Optional[DishModel]:
     return db.query(DishModel).filter(
-        DishModel.name == name,
+        func.lower(DishModel.name) == name.lower(),
         DishModel.category_id == category_id,
         DishModel.deleted_at.is_(None)
     ).first()
 
 def get_dishes(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(DishModel).filter(DishModel.deleted_at.is_(None)).offset(skip).limit(limit).all()
+    return (
+        db.query(DishModel)
+        .filter(DishModel.deleted_at.is_(None))
+        .order_by(DishModel.id)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
 def get_dish_by_id(db: Session, dish_id: int) -> Optional[DishModel]:
     return db.query(DishModel).filter(DishModel.id == dish_id, DishModel.deleted_at.is_(None)).first()

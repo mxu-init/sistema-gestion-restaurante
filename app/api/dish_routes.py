@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, status, File, UploadFile, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -9,7 +9,7 @@ from app.services import dish_service, image_service
 router = APIRouter(prefix="/dishes", tags=["Platos"])
 
 @router.get("/", response_model=List[DishResponse])
-def read_dishes(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def read_dishes(skip: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=200), db: Session = Depends(get_db)):
     return dish_service.get_dishes(db, skip=skip, limit=limit)
 
 @router.get("/{dish_id}", response_model=DishResponse)
