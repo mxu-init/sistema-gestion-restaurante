@@ -139,3 +139,30 @@ def delete_dish(dish_id: int, db: Session = Depends(get_db)):
         )
     dish_service.soft_delete_dish(db, dish_id)
     return None
+
+@router.post("/{dish_id}/restore", response_model=DishResponse)
+def restore_dish(dish_id: int, db: Session = Depends(get_db)):
+    db_dish = dish_service.get_dish_by_id_including_deleted(db, dish_id)
+    if not db_dish:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Plato no encontrado"
+        )
+    if db_dish.deleted_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El plato ya está activo"
+        )
+    existing_dish = dish_service.get_active_dish_by_name_and_category(db, db_dish.name, db_dish.category_id)
+    if existing_dish and existing_dish.id != dish_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ya existe un plato activo con ese nombre"
+        )
+    restored_dish = dish_service.restore_dish(db, dish_id)
+    if not restored_dish:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Plato no encontrado"
+        )
+    return restored_dish

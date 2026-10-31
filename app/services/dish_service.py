@@ -61,3 +61,12 @@ def soft_delete_dish(db: Session, dish_id: int) -> Optional[DishModel]:
     db_dish.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return db_dish
+
+def restore_dish(db: Session, dish_id: int) -> Optional[DishModel]:
+    db_dish = get_dish_by_id_including_deleted(db, dish_id)
+    if not db_dish or db_dish.deleted_at is None:
+        return None
+    db_dish.deleted_at = None
+    db.commit()
+    db.refresh(db_dish)
+    return db_dish
