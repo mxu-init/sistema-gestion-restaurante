@@ -28,6 +28,9 @@ def get_dishes(db: Session, skip: int = 0, limit: int = 100):
 def get_dish_by_id(db: Session, dish_id: int) -> Optional[DishModel]:
     return db.query(DishModel).filter(DishModel.id == dish_id, DishModel.deleted_at.is_(None)).first()
 
+def get_dish_by_id_including_deleted(db: Session, dish_id: int) -> Optional[DishModel]:
+    return db.query(DishModel).filter(DishModel.id == dish_id).first()
+
 def create_dish(db: Session, dish_data: DishCreate, image_url: Optional[str] = None) -> DishModel:
     new_dish = DishModel(
         **dish_data.model_dump(),

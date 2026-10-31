@@ -126,10 +126,16 @@ def update_dish(dish_id: int, dish_data: DishUpdate, db: Session = Depends(get_d
 
 @router.delete("/{dish_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_dish(dish_id: int, db: Session = Depends(get_db)):
-    db_dish = dish_service.soft_delete_dish(db, dish_id)
+    db_dish = dish_service.get_dish_by_id_including_deleted(db, dish_id)
     if not db_dish:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Plato no encontrado"
         )
+    if db_dish.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Este plato ya fue eliminado"
+        )
+    dish_service.soft_delete_dish(db, dish_id)
     return None
