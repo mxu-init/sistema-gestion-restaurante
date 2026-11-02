@@ -1,3 +1,5 @@
+import math
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status, File, UploadFile, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -39,10 +41,22 @@ def create_dish(
             detail="Datos del plato inválidos: El nombre no puede estar vacío"
         )
 
+    if len(name) > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Datos del plato inválidos: El nombre no puede exceder 100 caracteres"
+        )
+
     if price <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Datos del plato inválidos: El precio debe ser mayor a 0"
+        )
+
+    if not math.isfinite(price) or price > 99999999.99:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Datos del plato inválidos: El precio debe ser un número menor o igual a 99999999.99"
         )
 
     if not dish_service.check_category_exists(db, category_id):
@@ -84,19 +98,19 @@ def create_dish(
 
 @router.put("/{dish_id}", response_model=DishResponse)
 def update_dish(dish_id: int, dish_data: DishUpdate, db: Session = Depends(get_db)):
-    for field in ("name", "price", "category_id"):
-        if field in dish_data.model_fields_set and getattr(dish_data, field) is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Datos del plato inválidos: El campo '{field}' no puede ser nulo"
-            )
-
     db_dish = dish_service.get_dish_by_id(db, dish_id=dish_id)
     if not db_dish:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Plato no encontrado"
         )
+
+    for field in ("name", "price", "category_id"):
+        if field in dish_data.model_fields_set and getattr(dish_data, field) is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Datos del plato inválidos: El campo '{field}' no puede ser nulo"
+            )
 
     if dish_data.name is not None:
         dish_data.name = dish_data.name.strip()

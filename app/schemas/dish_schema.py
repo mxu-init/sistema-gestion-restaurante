@@ -5,7 +5,7 @@ from typing import Optional
 class DishBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = None
-    price: float = Field(..., gt=0, description="El precio debe ser mayor a 0")
+    price: float = Field(..., gt=0, le=99999999.99, description="El precio debe ser mayor a 0 y menor o igual a 99999999.99")
     is_available: bool = True
     category_id: int
 
@@ -15,7 +15,7 @@ class DishCreate(DishBase):
 class DishUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = None
-    price: Optional[float] = Field(None, gt=0)
+    price: Optional[float] = Field(None, gt=0, le=99999999.99)
     is_available: Optional[bool] = None
     category_id: Optional[int] = None
 
