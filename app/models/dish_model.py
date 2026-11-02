@@ -25,5 +25,7 @@ class DishModel(Base):
     is_available = Column(Boolean, default=True)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     image = Column(String, nullable=True)
+    source = Column(String(20), nullable=False, default="local", server_default="local")
+    source_id = Column(String(50), nullable=True)
 
     category = relationship("CategoryModel", back_populates="dishes")
