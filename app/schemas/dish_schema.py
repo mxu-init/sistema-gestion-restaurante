@@ -5,10 +5,10 @@ from typing import Optional
 class DishBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = None
-    price: float = Field(..., gt=0, le=99999999.99, description="El precio debe ser mayor a 0 y menor o igual a 99999999.99")
+    price: Optional[float] = Field(None, description="Precio del plato (debe ser mayor a 0)")
     is_available: bool = True
     category_id: int
-    course_type: Optional[str] = Field(None, max_length=20, description="primero, segundo o null")
+    allergens: Optional[str] = None
 
 class DishCreate(DishBase):
     pass
@@ -16,11 +16,11 @@ class DishCreate(DishBase):
 class DishUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = None
-    price: Optional[float] = Field(None, gt=0, le=99999999.99)
+    price: Optional[float] = None
     is_available: Optional[bool] = None
     category_id: Optional[int] = None
     image: Optional[str] = None
-    course_type: Optional[str] = Field(None, max_length=20)
+    allergens: Optional[str] = None
 
 class DishResponse(DishBase):
     id: int
