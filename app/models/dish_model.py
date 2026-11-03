@@ -23,6 +23,7 @@ class DishModel(Base):
     description = Column(String, nullable=True)
     price = Column(Numeric(8, 2), nullable=False)
     is_available = Column(Boolean, default=True)
+    course_type = Column(String(20), nullable=True)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     image = Column(String, nullable=True)
     source = Column(String(20), nullable=False, default="local", server_default="local")

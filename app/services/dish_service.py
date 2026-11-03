@@ -5,6 +5,18 @@ from sqlalchemy.orm import Session
 from app.models.dish_model import DishModel, CategoryModel
 from app.schemas.dish_schema import DishCreate, DishUpdate
 
+VALID_COURSE_TYPES = {"primero", "segundo"}
+
+def normalize_course_type(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if not normalized:
+        return None
+    if normalized not in VALID_COURSE_TYPES:
+        raise ValueError("course_type debe ser 'primero', 'segundo' o null")
+    return normalized
+
 def check_category_exists(db: Session, category_id: int) -> bool:
     return db.query(CategoryModel).filter(CategoryModel.id == category_id).first() is not None
 

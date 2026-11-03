@@ -8,6 +8,7 @@ class DishBase(BaseModel):
     price: float = Field(..., gt=0, le=99999999.99, description="El precio debe ser mayor a 0 y menor o igual a 99999999.99")
     is_available: bool = True
     category_id: int
+    course_type: Optional[str] = Field(None, max_length=20, description="primero, segundo o null")
 
 class DishCreate(DishBase):
     pass
@@ -19,6 +20,7 @@ class DishUpdate(BaseModel):
     is_available: Optional[bool] = None
     category_id: Optional[int] = None
     image: Optional[str] = None
+    course_type: Optional[str] = Field(None, max_length=20)
 
 class DishResponse(DishBase):
     id: int

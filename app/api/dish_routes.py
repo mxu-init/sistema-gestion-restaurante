@@ -33,6 +33,7 @@ def create_dish(
     is_available: bool = Form(True),
     file: Optional[UploadFile] = File(None),
     image_url: Optional[str] = Form(None),
+    course_type: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     name = name.strip()
@@ -64,6 +65,14 @@ def create_dish(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Datos del plato inválidos: La categoría no existe"
+        )
+
+    try:
+        course_type = dish_service.normalize_course_type(course_type)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Datos del plato inválidos: {error}"
         )
 
     existing_dish = dish_service.get_active_dish_by_name_and_category(db, name, category_id)
@@ -101,7 +110,8 @@ def create_dish(
         description=description,
         price=price,
         category_id=category_id,
-        is_available=is_available
+        is_available=is_available,
+        course_type=course_type
     )
     return dish_service.create_dish(db, dish_data, image)
 
@@ -142,6 +152,15 @@ def update_dish(dish_id: int, dish_data: DishUpdate, db: Session = Depends(get_d
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(error)
+            )
+
+    if "course_type" in dish_data.model_fields_set:
+        try:
+            dish_data.course_type = dish_service.normalize_course_type(dish_data.course_type)
+        except ValueError as error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Datos del plato inválidos: {error}"
             )
 
     final_name = dish_data.name if dish_data.name is not None else db_dish.name
