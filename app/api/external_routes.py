@@ -63,13 +63,6 @@ def import_external(payload: ExternalImportRequest, db: Session = Depends(get_db
             detail="Datos del plato inválidos: La categoría no existe",
         )
 
-    existing = dish_service.get_active_dish_by_source(db, payload.source, payload.source_id)
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Este producto ya fue importado anteriormente",
-        )
-
     try:
         product = external_service.lookup_product(payload.source, payload.source_id)
     except external_service.ExternalApiError as error:
@@ -119,8 +112,6 @@ def import_external(payload: ExternalImportRequest, db: Session = Depends(get_db
             db,
             dish_data,
             image_url=image_url,
-            source=payload.source,
-            source_id=payload.source_id,
         )
     except IntegrityError as error:
         db.rollback()

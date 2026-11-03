@@ -14,13 +14,6 @@ def get_active_dish_by_name_and_category(db: Session, name: str, category_id: in
         DishModel.deleted_at.is_(None)
     ).first()
 
-def get_active_dish_by_source(db: Session, source: str, source_id: str) -> Optional[DishModel]:
-    return db.query(DishModel).filter(
-        DishModel.source == source,
-        DishModel.source_id == source_id,
-        DishModel.deleted_at.is_(None)
-    ).first()
-
 def get_dishes(
     db: Session,
     skip: int = 0,
@@ -45,14 +38,10 @@ def create_dish(
     db: Session,
     dish_data: DishCreate,
     image_url: Optional[str] = None,
-    source: str = "local",
-    source_id: Optional[str] = None,
 ) -> DishModel:
     new_dish = DishModel(
         **dish_data.model_dump(),
         image=image_url,
-        source=source,
-        source_id=source_id
     )
     db.add(new_dish)
     db.commit()
