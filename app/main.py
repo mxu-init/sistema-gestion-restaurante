@@ -25,6 +25,10 @@ app.include_router(external_routes.router)
 async def root():
     return "API Template"
 
+@app.get("/health", tags=["Health"])
+def health():
+    return {"status": "ok"}
+
 @app.get("/health/db", tags=["Health"])
 def check_database():
     with engine.connect() as connection:
