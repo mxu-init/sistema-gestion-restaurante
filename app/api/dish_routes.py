@@ -32,6 +32,7 @@ def create_dish(
     category_id: int = Form(...),
     is_available: bool = Form(True),
     file: Optional[UploadFile] = File(None),
+    image_url: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     name = name.strip()
@@ -72,10 +73,10 @@ def create_dish(
             detail="Ya existe un plato activo con ese nombre"
         )
 
-    image_url = None
+    image = None
     if file:
         try:
-            image_url = image_service.save_dish_image(file)
+            image = image_service.save_dish_image(file)
         except ValueError as error:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -86,6 +87,14 @@ def create_dish(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Falla al registrar la imagen"
             )
+    elif image_url:
+        try:
+            image = image_service.validate_image_url(image_url)
+        except ValueError as error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(error)
+            )
 
     dish_data = DishCreate(
         name=name,
@@ -94,7 +103,7 @@ def create_dish(
         category_id=category_id,
         is_available=is_available
     )
-    return dish_service.create_dish(db, dish_data, image_url)
+    return dish_service.create_dish(db, dish_data, image)
 
 @router.put("/{dish_id}", response_model=DishResponse)
 def update_dish(dish_id: int, dish_data: DishUpdate, db: Session = Depends(get_db)):
@@ -125,6 +134,15 @@ def update_dish(dish_id: int, dish_data: DishUpdate, db: Session = Depends(get_d
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Datos del plato inválidos: La categoría no existe"
         )
+
+    if dish_data.image is not None:
+        try:
+            dish_data.image = image_service.validate_image_url(dish_data.image)
+        except ValueError as error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(error)
+            )
 
     final_name = dish_data.name if dish_data.name is not None else db_dish.name
     final_category_id = dish_data.category_id if dish_data.category_id is not None else db_dish.category_id

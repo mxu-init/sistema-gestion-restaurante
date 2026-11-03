@@ -105,13 +105,7 @@ def import_external(payload: ExternalImportRequest, db: Session = Depends(get_db
 
     image_url = None
     if product.get("image_url"):
-        try:
-            image_url = external_service.save_image_from_url(product["image_url"])
-        except external_service.ExternalApiError as error:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="No se pudo descargar la imagen del producto, intente más tarde",
-            ) from error
+        image_url = product["image_url"].strip() or None
 
     dish_data = DishCreate(
         name=name,
@@ -130,7 +124,6 @@ def import_external(payload: ExternalImportRequest, db: Session = Depends(get_db
         )
     except IntegrityError as error:
         db.rollback()
-        external_service.remove_uploaded_image(image_url)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Este producto ya fue importado anteriormente",

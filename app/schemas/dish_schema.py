@@ -18,6 +18,7 @@ class DishUpdate(BaseModel):
     price: Optional[float] = Field(None, gt=0, le=99999999.99)
     is_available: Optional[bool] = None
     category_id: Optional[int] = None
+    image: Optional[str] = None
 
 class DishResponse(DishBase):
     id: int

@@ -1,15 +1,9 @@
 import json
-import logging
-import os
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import uuid
 from typing import Any, Optional
-
-UPLOAD_DIR = "static/uploads"
-ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 MEALDB_BASE = "https://www.themealdb.com/api/json/v1/1"
 COCKTAILDB_BASE = "https://www.thecocktaildb.com/api/json/v1/1"
@@ -100,33 +94,3 @@ def lookup_product(source: str, source_id: str) -> Optional[dict]:
         drinks = payload.get("drinks") or []
         return _normalize_drink(drinks[0]) if drinks else None
     raise ValueError(f"unknown source: {source}")
-
-
-def save_image_from_url(url: str) -> str:
-    extension = os.path.splitext(urllib.parse.urlparse(url).path)[1].lower()
-    if extension not in ALLOWED_EXTENSIONS:
-        raise ExternalApiError(f"unsupported image extension: {extension or 'none'}")
-
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
-            content = response.read()
-    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as error:
-        raise ExternalApiError(f"image download failed: {error}") from error
-
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    filename = f"{uuid.uuid4()}{extension}"
-    with open(os.path.join(UPLOAD_DIR, filename), "wb") as buffer:
-        buffer.write(content)
-    return f"/static/uploads/{filename}"
-
-
-def remove_uploaded_image(image_url: str) -> None:
-    if not image_url or not image_url.startswith("/static/uploads/"):
-        return
-    file_path = os.path.join(UPLOAD_DIR, os.path.basename(image_url))
-    try:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-    except OSError as error:
-        logging.warning("could not remove %s: %s", file_path, error)
