@@ -40,6 +40,9 @@ MANIFEST
 *.log
 *.sqlite3
 
+# Imagenes subidas por usuarios
+static/uploads/
+
 # Cobertura y testing
 .coverage
 htmlcov/
