@@ -18,4 +18,4 @@ class CategoryResponse(CategoryBase):
         from_attributes = True
 
 class CategoryWithDishesResponse(CategoryResponse):
-    dishes: List[DishResponse] = []
+    active_dishes: List[DishResponse] = []
