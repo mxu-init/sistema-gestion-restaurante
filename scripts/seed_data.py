@@ -4,7 +4,7 @@ from app.models.dish_model import CategoryModel, DishModel
 def run_seed():
     db = session_local()
     try:
-        categories_list = ["Primeros", "Segundos", "Postres", "Bebidas"]
+        categories_list = ["Entrantes","Primeros", "Segundos", "Postres", "Bebidas"]
         categories_map = {}
 
         for category_name in categories_list:
@@ -17,6 +17,25 @@ def run_seed():
             categories_map[category_name] = category_db.id
 
         initial_dishes = [
+            # Entrantes (3)
+            {
+                "name": "Nachos con Queso",
+                "description": "Nachos con queso derretido y guacamole",
+                "price": 5.50,
+                "category_id": categories_map["Entrantes"]
+            },
+            {
+                "name": "Alitas de Pollo",
+                "description": "Alitas de pollo fritas con salsa BBQ",
+                "price": 6.00,
+                "category_id": categories_map["Entrantes"]
+            },
+            {
+                "name": "Calamares Fritos",
+                "description": "Calamares empanizados con salsa tártara",
+                "price": 7.00,
+                "category_id": categories_map["Entrantes"]
+            },
             # Primeros (3)
             {
                 "name": "Ensalada César",
