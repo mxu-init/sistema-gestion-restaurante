@@ -1,5 +1,3 @@
-import math
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status, File, UploadFile, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -11,8 +9,17 @@ from app.services import dish_service, image_service
 router = APIRouter(prefix="/dishes", tags=["Platos"])
 
 @router.get("/", response_model=List[DishResponse])
-def read_dishes(skip: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=200), db: Session = Depends(get_db)):
-    return dish_service.get_dishes(db, skip=skip, limit=limit)
+def read_dishes(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
+    category_id: Optional[int] = Query(None, description="Filtrar por categoría"),
+    is_available: Optional[bool] = Query(None, description="Filtrar por disponibilidad"),
+    db: Session = Depends(get_db),
+):
+    return dish_service.get_dishes(
+        db, skip=skip, limit=limit,
+        category_id=category_id, is_available=is_available,
+    )
 
 @router.get("/{dish_id}", response_model=DishResponse)
 def read_dish_by_id(dish_id: int, db: Session = Depends(get_db)):
@@ -31,9 +38,9 @@ def create_dish(
     price: float = Form(...),
     category_id: int = Form(...),
     is_available: bool = Form(True),
+    allergens: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
     image_url: Optional[str] = Form(None),
-    course_type: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     name = name.strip()
@@ -55,24 +62,16 @@ def create_dish(
             detail="Datos del plato inválidos: El precio debe ser mayor a 0"
         )
 
-    if not math.isfinite(price) or price > 99999999.99:
+    if price > 99999999.99:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Datos del plato inválidos: El precio debe ser un número menor o igual a 99999999.99"
+            detail="Datos del plato inválidos: El precio debe ser menor o igual a 99999999.99"
         )
 
     if not dish_service.check_category_exists(db, category_id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Datos del plato inválidos: La categoría no existe"
-        )
-
-    try:
-        course_type = dish_service.normalize_course_type(course_type)
-    except ValueError as error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Datos del plato inválidos: {error}"
         )
 
     existing_dish = dish_service.get_active_dish_by_name_and_category(db, name, category_id)
@@ -111,7 +110,7 @@ def create_dish(
         price=price,
         category_id=category_id,
         is_available=is_available,
-        course_type=course_type
+        allergens=allergens,
     )
     return dish_service.create_dish(db, dish_data, image)
 
@@ -124,53 +123,46 @@ def update_dish(dish_id: int, dish_data: DishUpdate, db: Session = Depends(get_d
             detail="Plato no encontrado"
         )
 
-    for field in ("name", "price", "category_id"):
-        if field in dish_data.model_fields_set and getattr(dish_data, field) is None:
+    update_data = dish_data.model_dump(exclude_unset=True)
+
+    if "price" in update_data and update_data["price"] is not None:
+        price = update_data["price"]
+        if price <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Datos del plato inválidos: El campo '{field}' no puede ser nulo"
+                detail="Datos del plato inválidos: El precio debe ser mayor a 0"
             )
-
-    if dish_data.name is not None:
-        dish_data.name = dish_data.name.strip()
-        if not dish_data.name:
+        if price > 99999999.99:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Datos del plato inválidos: El nombre no puede estar vacío"
+                detail="Datos del plato inválidos: El precio debe ser menor o igual a 99999999.99"
             )
 
-    if dish_data.category_id is not None and not dish_service.check_category_exists(db, dish_data.category_id):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Datos del plato inválidos: La categoría no existe"
-        )
+    if "category_id" in update_data and update_data["category_id"] is not None:
+        if not dish_service.check_category_exists(db, update_data["category_id"]):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Datos del plato inválidos: La categoría no existe"
+            )
 
-    if dish_data.image is not None:
+    if "image" in update_data and update_data["image"] is not None:
         try:
-            dish_data.image = image_service.validate_image_url(dish_data.image)
+            update_data["image"] = image_service.validate_image_url(update_data["image"])
         except ValueError as error:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(error)
             )
 
-    if "course_type" in dish_data.model_fields_set:
-        try:
-            dish_data.course_type = dish_service.normalize_course_type(dish_data.course_type)
-        except ValueError as error:
+    final_name = update_data.get("name", db_dish.name)
+    final_category_id = update_data.get("category_id", db_dish.category_id)
+    if final_name != db_dish.name or final_category_id != db_dish.category_id:
+        existing_dish = dish_service.get_active_dish_by_name_and_category(db, final_name, final_category_id)
+        if existing_dish and existing_dish.id != dish_id:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Datos del plato inválidos: {error}"
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Ya existe un plato activo con ese nombre"
             )
-
-    final_name = dish_data.name if dish_data.name is not None else db_dish.name
-    final_category_id = dish_data.category_id if dish_data.category_id is not None else db_dish.category_id
-    existing_dish = dish_service.get_active_dish_by_name_and_category(db, final_name, final_category_id)
-    if existing_dish and existing_dish.id != dish_id:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Ya existe un plato activo con ese nombre"
-        )
 
     db_dish = dish_service.update_dish(db=db, dish_id=dish_id, dish_data=dish_data)
     return db_dish
