@@ -10,8 +10,8 @@ router = APIRouter(prefix="/dishes", tags=["Platos"])
 
 @router.get("/", response_model=List[DishResponse])
 def read_dishes(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=200),
+    skip: int = Query(0, ge=0, description="Saltarse X registros:"),
+    limit: int = Query(100, ge=1, le=200, description="Límite de registros por consulta:"),
     category_id: Optional[int] = Query(None, description="Filtrar por categoría"),
     is_available: Optional[bool] = Query(None, description="Filtrar por disponibilidad"),
     db: Session = Depends(get_db),
