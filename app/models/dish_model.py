@@ -2,8 +2,6 @@ from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, Fore
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database_connection import Base
-from app.models.allergen_model import dish_allergens, AllergenModel
-
 
 class CategoryModel(Base):
     __tablename__ = "categories"
@@ -25,7 +23,7 @@ class DishModel(Base):
     description = Column(String, nullable=True)
     price = Column(Numeric(8, 2), nullable=False)
     is_available = Column(Boolean, nullable=False, default=True, server_default="true")
-    allergens = relationship("AllergenModel", secondary=dish_allergens, back_populates="dishes")
+    allergens = Column(String, nullable=True)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     image = Column(String, nullable=True)
 
