@@ -109,6 +109,7 @@ PYDANTIC_SPANISH_FALLBACKS: dict[str, str] = {
 CONSTRAINT_SPANISH_MESSAGES: dict[str, str] = {
     "uq_categories_name": "Ya existe una categoría con ese nombre",
     "categories_name_key": "Ya existe una categoría con ese nombre",
+    "ix_categories_name": "Ya existe una categoría con ese nombre",
     "uq_dishes_name_category": "Ya existe un plato con ese nombre en la categoría",
     "dishes_category_id_fkey": "La categoría asociada no existe o no está disponible",
     "uq_users_email": "Ya existe un usuario registrado con ese correo electrónico",
