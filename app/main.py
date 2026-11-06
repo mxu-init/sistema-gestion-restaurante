@@ -8,7 +8,13 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
-from app.api import category_routes, dish_routes, routes, test_routes
+from app.api import (
+    allergen_routes,
+    category_routes,
+    dish_routes,
+    routes,
+    test_routes,
+)
 from app.core.config import settings
 from app.core.database_connection import engine
 from app.core.handlers import register_exception_handlers
@@ -89,6 +95,7 @@ def create_app() -> FastAPI:
     application.include_router(test_routes.router)
     application.include_router(dish_routes.router)
     application.include_router(category_routes.router)
+    application.include_router(allergen_routes.router)
     application.include_router(routes.router)
 
     @application.get("/")

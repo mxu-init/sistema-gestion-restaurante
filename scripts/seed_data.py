@@ -1,5 +1,6 @@
 from app.core.database_connection import session_local
 from app.models.dish_model import CategoryModel, DishModel
+from app.models.allergen_model import AllergenModel
 
 def run_seed():
     db = session_local()
@@ -121,6 +122,16 @@ def run_seed():
             ).first()
             if not dish_exists:
                 db.add(DishModel(**dish_item))
+
+        OFFICIAL_ALLERGENS = [
+            "Gluten", "Crustáceos", "Huevos", "Pescado", "Cacahuetes", "Soja", "Lácteos", "Frutos de cáscara", "Apio",
+            "Mostaza", "Sésamo", "Dióxido de azufre y sulfitos", "Altramuces", "Moluscos"
+        ]
+
+        for allergen_name in OFFICIAL_ALLERGENS:
+            allergen_exists = db.query(AllergenModel).filter(AllergenModel.name == allergen_name).first()
+            if not allergen_exists:
+                db.add(AllergenModel(name=allergen_name))
 
         db.commit()
         print("Carga inicial de datos completada con éxito.")
