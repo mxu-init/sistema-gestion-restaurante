@@ -66,3 +66,8 @@ tarrea-errores-soul.txt
 sgr-49-*.md
 antigravity*.txt
 result*.txt
+
+# Archivos multimedia y documentación de presentación interna
+*.mp4
+docs/
+
