@@ -103,38 +103,50 @@ Petición Cliente
 ## 📂 Estructura del Repositorio
 
 ```text
-gestion_restaurante/
+sistema-gestion-restaurante/
+├── alembic/                     # Control de versiones del esquema y datos
+│   ├── versions/                # 8 revisiones: tablas, columna legacy y datos fijos
+│   │   ├── c23d2bf3b75a_...     # elimina la columna legacy dishes.allergens
+│   │   └── aacc49216385_...     # inserta categorías base y alérgenos UE
+│   ├── env.py                   # Conecta Alembic con los modelos de app/models
+│   └── script.py.mako
 ├── app/
-│   ├── api/                     # Definición de rutas, métodos HTTP y tags de Swagger
-│   │   ├── api_router.py        # Enrutador maestro
-│   │   ├── auth_routes.py       # Endpoints de autenticación y tokens
-│   │   ├── dish_routes.py       # Endpoints de platos y disponibilidad
+│   ├── api/                     # Rutas FastAPI (APIRouter) y documentación Swagger
+│   │   ├── dish_routes.py       # CRUD de platos y asignación de alérgenos
 │   │   ├── category_routes.py   # Endpoints de categorías de carta
-│   │   └── ...
-│   ├── controllers/             # Controladores que coordinan servicios
-│   ├── services/                # Lógica de negocio y persistencia en DB
-│   ├── models/                  # Modelos relacionales ORM (SQLAlchemy)
-│   │   ├── base_model.py        # Modelo base con timestamps y borrado lógico
-│   │   ├── user_model.py        # Modelo de usuarios y roles
-│   │   ├── dish_model.py        # Modelo de platos y relación con alérgenos
-│   │   └── ...
-│   ├── schemas/                 # Esquemas Pydantic (Create, Update, Read)
-│   ├── core/                    # Configuración global, seguridad y conexiones
+│   │   ├── allergen_routes.py   # Endpoints de alérgenos
+│   │   └── test_routes.py       # Endpoint de plantilla
+│   ├── controllers/             # Orquestación de casos de uso
+│   │   └── test_controller.py
+│   ├── services/                # Lógica de negocio y consultas SQLAlchemy
+│   │   ├── dish_service.py      # Platos + allergen_ids + selectinload
+│   │   ├── category_service.py
+│   │   ├── allergen_service.py  # Validación y carga de alérgenos por ID
+│   │   ├── image_service.py
+│   │   └── reference_service.py # Restaura categorías y alérgenos en el arranque
+│   ├── models/                  # Un archivo por tabla (SQLAlchemy)
+│   │   ├── __init__.py          # Registro único de modelos (relaciones entre archivos)
+│   │   ├── category_model.py    # categories
+│   │   ├── dish_model.py        # dishes
+│   │   ├── allergen_model.py    # allergens
+│   │   ├── dish_allergen_model.py # dish_allergens (tabla intermedia)
+│   │   └── test_model.py        # test (plantilla)
+│   ├── schemas/                 # Esquemas Pydantic (Create, Update, Response)
+│   │   ├── dish_schema.py
+│   │   ├── category_schema.py
+│   │   ├── allergen_schema.py
+│   │   └── test_schema.py
+│   ├── core/                    # Configuración global y conexión
 │   │   ├── config.py            # Variables de entorno y ajustes generales
-│   │   ├── database_connection.py # Engine y sesión de SQLAlchemy
-│   │   ├── dependencies.py      # Inyección de dependencias (get_db, require_roles)
-│   │   ├── enums.py             # Enums de negocio (UserRole, ReservationStatus)
-│   │   ├── exceptions.py        # Excepciones de dominio personalizadas
-│   │   ├── security.py          # Hashing de passwords y gestión de JWT
-│   │   └── seed.py              # Semilla de datos iniciales (alérgenos, admin, categorías)
-│   └── main.py                  # Instancia principal de FastAPI y registro de middleware
-├── scripts/                     # Scripts de utilidad, seeding y validación
-│   ├── seed_data.py             # Población inicial de la base de datos
+│   │   ├── database_connection.py # Engine, sesión y get_db
+│   │   └── reference_data.py    # Categorías base y alérgenos UE (fuente única)
+│   └── main.py                  # Instancia FastAPI, lifespan y registro de routers
+├── scripts/                     # Scripts de utilidad y validación
+│   ├── seed_data.py             # Carga opcional de los 15 platos de ejemplo
 │   └── check_commit_msg.py      # Verificador de Conventional Commits
-├── tests/                       # Suites de pruebas automáticas (unitarias y BDD)
+├── alembic.ini                  # Configuración de Alembic
 ├── .pre-commit-config.yaml      # Hooks de calidad y formato
 ├── requirements.txt             # Dependencias del proyecto
-├── .env.example                 # Plantilla de variables de entorno requeridas
 └── README.md                    # Documentación del proyecto
 ```
 
@@ -174,32 +186,28 @@ pip install -r requirements.txt
 ```
 
 ### 5. Configurar las Variables de Entorno
-Copia la plantilla `.env.example` para generar tu archivo `.env`:
-```bash
-cp .env.example .env
-```
-
-Configura en el archivo `.env` los valores correspondientes a tu base de datos y credenciales:
+Crea el archivo `.env` en la raíz del proyecto con los valores correspondientes a tu base de datos y credenciales:
 ```env
 APP_NAME="Ratatouille ERP"
 APP_VERSION="1.0.0"
-ENVIRONMENT="development"
+APP_DESCRIPTION="Sistema de gestion operativa de restaurantes"
 
 # Base de datos
-DATABASE_URL="postgresql+psycopg://postgres:tu_password@localhost:5432/restaurante_erp_db"
-
-# Seguridad y Autenticación JWT
-SECRET_KEY="tu_clave_secreta_super_segura_aqui"
-ALGORITHM="HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES=480
-
-# Usuario inicial Super Administrador
-SUPERADMIN_EMAIL="admin@restaurante.com"
-SUPERADMIN_PASSWORD="AdminPasswordSegura123!"
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=restaurante_erp_db
+DB_USER=postgres
+DB_PASSWORD=tu_password
+DRIVER_NAME=postgresql+psycopg
 ```
 
-### 6. Cargar Datos Iniciales (Seed)
-Ejecuta el script de semilla para poblar el catálogo de alérgenos oficiales, las categorías base de la carta y el usuario administrador inicial:
+### 6. Aplicar las Migraciones y los Datos Fijos
+```bash
+alembic upgrade head
+```
+Este comando crea el esquema e inserta los **datos fijos**: las 5 categorías base (*Entrantes, Primeros, Segundos, Postres, Bebidas*) y los **14 alérgenos de declaración obligatoria** de la UE. Además, el API los vuelve a comprobar en cada arranque por si faltara alguno.
+
+Carga opcional de los 15 platos de ejemplo:
 ```bash
 python -m scripts.seed_data
 ```
