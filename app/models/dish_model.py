@@ -11,7 +11,6 @@ class DishModel(Base):
     description = Column(String, nullable=True)
     price = Column(Numeric(8, 2), nullable=False)
     is_available = Column(Boolean, nullable=False, default=True, server_default="true")
-    allergens = Column(String, nullable=True)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     image = Column(String, nullable=True)
 

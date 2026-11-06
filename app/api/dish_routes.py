@@ -38,7 +38,6 @@ def create_dish(
     price: float = Form(...),
     category_id: int = Form(...),
     is_available: bool = Form(True),
-    allergens: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
     image_url: Optional[str] = Form(None),
     db: Session = Depends(get_db)
@@ -110,7 +109,6 @@ def create_dish(
         price=price,
         category_id=category_id,
         is_available=is_available,
-        allergens=allergens,
     )
     return dish_service.create_dish(db, dish_data, image)
 
