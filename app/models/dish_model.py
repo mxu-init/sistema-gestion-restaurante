@@ -1,18 +1,8 @@
 from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 from app.core.database_connection import Base
+from app.models.dish_allergen_model import dish_allergens
 
-class CategoryModel(Base):
-    __tablename__ = "categories"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
-    active_dishes = relationship(
-        "DishModel",
-        primaryjoin="and_(CategoryModel.id == DishModel.category_id, DishModel.deleted_at.is_(None))",
-        back_populates="category",
-        viewonly=True,
-    )
 
 class DishModel(Base):
     __tablename__ = "dishes"
@@ -23,8 +13,12 @@ class DishModel(Base):
     description = Column(String, nullable=True)
     price = Column(Numeric(8, 2), nullable=False)
     is_available = Column(Boolean, nullable=False, default=True, server_default="true")
-    allergens = Column(String, nullable=True)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     image = Column(String, nullable=True)
 
     category = relationship("CategoryModel", back_populates="active_dishes")
+    allergens = relationship(
+        "AllergenModel",
+        secondary=dish_allergens,
+        back_populates="dishes",
+    )

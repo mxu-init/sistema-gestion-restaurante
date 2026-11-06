@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from app.models.dish_model import CategoryModel, DishModel
+from app.models import CategoryModel, DishModel
 from app.schemas.category_schema import CategoryCreate, CategoryUpdate
 
 def get_categories(db: Session) -> List[CategoryModel]:

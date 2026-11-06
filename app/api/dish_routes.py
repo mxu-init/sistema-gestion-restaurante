@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from app.core.database_connection import get_db
 from app.schemas.dish_schema import DishCreate, DishUpdate, DishResponse
-from app.services import dish_service, image_service
+from app.services import dish_service, image_service, allergen_service
 
 router = APIRouter(prefix="/dishes", tags=["Platos"])
 
@@ -38,7 +38,7 @@ def create_dish(
     price: float = Form(...),
     category_id: int = Form(...),
     is_available: bool = Form(True),
-    allergens: Optional[str] = Form(None),
+    allergen_ids: List[int] = Form(default=[]),
     file: Optional[UploadFile] = File(None),
     image_url: Optional[str] = Form(None),
     db: Session = Depends(get_db)
@@ -72,6 +72,12 @@ def create_dish(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Datos del plato inválidos: La categoría no existe"
+        )
+
+    if not allergen_service.check_allergens_exist(db, allergen_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Datos del plato inválidos: Uno o más alérgenos no existen"
         )
 
     existing_dish = dish_service.get_active_dish_by_name_and_category(db, name, category_id)
@@ -110,9 +116,8 @@ def create_dish(
         price=price,
         category_id=category_id,
         is_available=is_available,
-        allergens=allergens,
     )
-    return dish_service.create_dish(db, dish_data, image)
+    return dish_service.create_dish(db, dish_data, image, allergen_ids=allergen_ids)
 
 @router.put("/{dish_id}", response_model=DishResponse)
 def update_dish(dish_id: int, dish_data: DishUpdate, db: Session = Depends(get_db)):
@@ -143,6 +148,13 @@ def update_dish(dish_id: int, dish_data: DishUpdate, db: Session = Depends(get_d
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Datos del plato inválidos: La categoría no existe"
+            )
+
+    if "allergen_ids" in update_data and update_data["allergen_ids"] is not None:
+        if not allergen_service.check_allergens_exist(db, update_data["allergen_ids"]):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Datos del plato inválidos: Uno o más alérgenos no existen"
             )
 
     if "image" in update_data and update_data["image"] is not None:

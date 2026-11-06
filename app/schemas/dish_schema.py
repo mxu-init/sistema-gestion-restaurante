@@ -1,6 +1,8 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
+
+from app.schemas.allergen_schema import AllergenResponse
 
 class DishBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
@@ -8,7 +10,6 @@ class DishBase(BaseModel):
     price: Optional[float] = Field(None, description="Precio del plato (debe ser mayor a 0)")
     is_available: bool = True
     category_id: int
-    allergens: Optional[str] = None
 
 class DishCreate(DishBase):
     pass
@@ -20,12 +21,13 @@ class DishUpdate(BaseModel):
     is_available: Optional[bool] = None
     category_id: Optional[int] = None
     image: Optional[str] = None
-    allergens: Optional[str] = None
+    allergen_ids: Optional[List[int]] = None
 
 class DishResponse(DishBase):
     id: int
     image: Optional[str] = None
     deleted_at: Optional[datetime] = None
+    allergens: List[AllergenResponse] = []
 
     class Config:
         from_attributes = True
