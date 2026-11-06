@@ -1,27 +1,25 @@
 from app.core.database_connection import session_local
-from app.core.reference_data import BASE_CATEGORIES, EU_ALLERGENS
-from app.models import CategoryModel, DishModel, AllergenModel
+from app.core.reference_data import BASE_CATEGORIES
+from app.models import CategoryModel, DishModel
 
 def run_seed():
     db = session_local()
     try:
-        categories_list = BASE_CATEGORIES
         categories_map = {}
 
-        for category_name in categories_list:
+        for category_name in BASE_CATEGORIES:
             category_db = db.query(CategoryModel).filter(CategoryModel.name == category_name).first()
             if not category_db:
-                category_db = CategoryModel(name=category_name)
-                db.add(category_db)
-                db.commit()
-                db.refresh(category_db)
+                raise RuntimeError(
+                    f"Base category '{category_name}' is missing, run 'alembic upgrade head' first"
+                )
             categories_map[category_name] = category_db.id
 
         initial_dishes = [
             # Entrantes (3)
             {
                 "name": "Nachos con Queso",
-                "description": "Nachos con queso derretido y guacamole",
+                "description": "Nachos con queso derregado y guacamole",
                 "price": 5.50,
                 "category_id": categories_map["Entrantes"]
             },
@@ -33,7 +31,7 @@ def run_seed():
             },
             {
                 "name": "Calamares Fritos",
-                "description": "Calamares empanizados con salsa tártara",
+                "description": "Calamares empanados con salsa tártara",
                 "price": 7.00,
                 "category_id": categories_map["Entrantes"]
             },
@@ -122,11 +120,6 @@ def run_seed():
             ).first()
             if not dish_exists:
                 db.add(DishModel(**dish_item))
-
-        for allergen_name in EU_ALLERGENS:
-            allergen_exists = db.query(AllergenModel).filter(AllergenModel.name == allergen_name).first()
-            if not allergen_exists:
-                db.add(AllergenModel(name=allergen_name))
 
         db.commit()
         print("Carga inicial de datos completada con éxito.")

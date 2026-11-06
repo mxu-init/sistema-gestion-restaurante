@@ -11,18 +11,18 @@ from app.models import AllergenModel, CategoryModel
 logger = logging.getLogger(__name__)
 
 
-def _insert_missing(db: Session, model: Type, names: List[str]) -> None:
+def _add_missing(db: Session, model: Type, names: List[str]) -> None:
     existing = {name for (name,) in db.query(model.name).all()}
     for name in names:
         if name not in existing:
             db.add(model(name=name))
+
+
+def _ensure_reference_data(db: Session) -> None:
+    """Insert any missing base category or allergen, then commit once. Idempotent."""
+    _add_missing(db, CategoryModel, BASE_CATEGORIES)
+    _add_missing(db, AllergenModel, EU_ALLERGENS)
     db.commit()
-
-
-def ensure_reference_data(db: Session) -> None:
-    """Insert any missing base category or allergen. Idempotent."""
-    _insert_missing(db, CategoryModel, BASE_CATEGORIES)
-    _insert_missing(db, AllergenModel, EU_ALLERGENS)
 
 
 def ensure_reference_data_on_startup() -> None:
@@ -41,6 +41,6 @@ def ensure_reference_data_on_startup() -> None:
 
     db = session_local()
     try:
-        ensure_reference_data(db)
+        _ensure_reference_data(db)
     finally:
         db.close()

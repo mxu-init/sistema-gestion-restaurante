@@ -1,4 +1,3 @@
-import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -10,8 +9,6 @@ from app.core.config import settings
 from app.core.database_connection import engine
 from app.api import test_routes, dish_routes, category_routes, allergen_routes
 from app.services import reference_service
-
-logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
