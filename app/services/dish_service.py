@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy.orm import Session
-from app.models.dish_model import DishModel, CategoryModel
+from app.models import DishModel, CategoryModel
 from app.schemas.dish_schema import DishCreate, DishUpdate
 
 def check_category_exists(db: Session, category_id: int) -> bool:

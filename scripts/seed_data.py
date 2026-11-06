@@ -1,6 +1,5 @@
 from app.core.database_connection import session_local
-from app.models.dish_model import CategoryModel, DishModel
-from app.models.allergen_model import AllergenModel
+from app.models import CategoryModel, DishModel, AllergenModel
 
 def run_seed():
     db = session_local()
