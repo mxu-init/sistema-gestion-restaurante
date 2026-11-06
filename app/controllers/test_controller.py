@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from app.models import TestModel
+from app.models.test_model import TestModel
 from app.schemas.test_schema import TestCreate
 
 def create_test(db: Session, test: TestCreate):
