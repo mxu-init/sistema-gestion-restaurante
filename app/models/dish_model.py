@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from app.core.database_connection import Base
+from app.models.dish_allergen_model import dish_allergens
+
 
 class DishModel(Base):
     __tablename__ = "dishes"
@@ -15,3 +17,8 @@ class DishModel(Base):
     image = Column(String, nullable=True)
 
     category = relationship("CategoryModel", back_populates="active_dishes")
+    allergens = relationship(
+        "AllergenModel",
+        secondary=dish_allergens,
+        back_populates="dishes",
+    )

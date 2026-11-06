@@ -1,8 +1,9 @@
 from datetime import datetime, timezone
-from typing import Optional
-from sqlalchemy.orm import Session
+from typing import List, Optional
+from sqlalchemy.orm import Session, selectinload
 from app.models import DishModel, CategoryModel
 from app.schemas.dish_schema import DishCreate, DishUpdate
+from app.services import allergen_service
 
 def check_category_exists(db: Session, category_id: int) -> bool:
     return db.query(CategoryModel).filter(CategoryModel.id == category_id).first() is not None
@@ -26,10 +27,21 @@ def get_dishes(
         query = query.filter(DishModel.category_id == category_id)
     if is_available is not None:
         query = query.filter(DishModel.is_available == is_available)
-    return query.order_by(DishModel.id).offset(skip).limit(limit).all()
+    return (
+        query.options(selectinload(DishModel.allergens))
+        .order_by(DishModel.id)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
 def get_dish_by_id(db: Session, dish_id: int) -> Optional[DishModel]:
-    return db.query(DishModel).filter(DishModel.id == dish_id, DishModel.deleted_at.is_(None)).first()
+    return (
+        db.query(DishModel)
+        .options(selectinload(DishModel.allergens))
+        .filter(DishModel.id == dish_id, DishModel.deleted_at.is_(None))
+        .first()
+    )
 
 def get_dish_by_id_including_deleted(db: Session, dish_id: int) -> Optional[DishModel]:
     return db.query(DishModel).filter(DishModel.id == dish_id).first()
@@ -38,11 +50,14 @@ def create_dish(
     db: Session,
     dish_data: DishCreate,
     image_url: Optional[str] = None,
+    allergen_ids: Optional[List[int]] = None,
 ) -> DishModel:
     new_dish = DishModel(
         **dish_data.model_dump(),
         image=image_url,
     )
+    if allergen_ids:
+        new_dish.allergens = allergen_service.get_allergens_by_ids(db, allergen_ids)
     db.add(new_dish)
     db.commit()
     db.refresh(new_dish)
@@ -54,8 +69,13 @@ def update_dish(db: Session, dish_id: int, dish_data: DishUpdate) -> Optional[Di
         return None
 
     update_data = dish_data.model_dump(exclude_unset=True)
+    allergen_ids = update_data.pop("allergen_ids", None)
+
     for key, value in update_data.items():
         setattr(db_dish, key, value)
+
+    if allergen_ids is not None:
+        db_dish.allergens = allergen_service.get_allergens_by_ids(db, allergen_ids)
 
     db.commit()
     db.refresh(db_dish)
