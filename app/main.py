@@ -1,4 +1,7 @@
+import logging
 import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
@@ -6,11 +9,20 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.core.database_connection import engine
 from app.api import test_routes, dish_routes, category_routes, allergen_routes
+from app.services import reference_service
+
+logger = logging.getLogger(__name__)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    reference_service.ensure_reference_data_on_startup()
+    yield
 
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description=settings.APP_DESCRIPTION
+    description=settings.APP_DESCRIPTION,
+    lifespan=lifespan,
 )
 
 os.makedirs("static/uploads", exist_ok=True)

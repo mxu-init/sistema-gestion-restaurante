@@ -1,10 +1,11 @@
 from app.core.database_connection import session_local
+from app.core.reference_data import BASE_CATEGORIES, EU_ALLERGENS
 from app.models import CategoryModel, DishModel, AllergenModel
 
 def run_seed():
     db = session_local()
     try:
-        categories_list = ["Entrantes","Primeros", "Segundos", "Postres", "Bebidas"]
+        categories_list = BASE_CATEGORIES
         categories_map = {}
 
         for category_name in categories_list:
@@ -122,12 +123,7 @@ def run_seed():
             if not dish_exists:
                 db.add(DishModel(**dish_item))
 
-        OFFICIAL_ALLERGENS = [
-            "Gluten", "Crustáceos", "Huevos", "Pescado", "Cacahuetes", "Soja", "Lácteos", "Frutos de cáscara", "Apio",
-            "Mostaza", "Sésamo", "Dióxido de azufre y sulfitos", "Altramuces", "Moluscos"
-        ]
-
-        for allergen_name in OFFICIAL_ALLERGENS:
+        for allergen_name in EU_ALLERGENS:
             allergen_exists = db.query(AllergenModel).filter(AllergenModel.name == allergen_name).first()
             if not allergen_exists:
                 db.add(AllergenModel(name=allergen_name))
