@@ -5,7 +5,7 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.database_connection import engine
-from app.api import test_routes, dish_routes, category_routes, allergen_routes
+from app.api import test_routes, dish_routes, category_routes, allergen_routes, table_routes
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -20,6 +20,7 @@ app.include_router(test_routes.router)
 app.include_router(dish_routes.router)
 app.include_router(category_routes.router)
 app.include_router(allergen_routes.router)
+app.include_router(table_routes.router)
 
 @app.get("/")
 async def root():

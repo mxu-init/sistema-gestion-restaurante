@@ -11,6 +11,7 @@ from app.core.database_connection import Base
 from app.models.dish_model import CategoryModel, DishModel
 from app.models.allergen_model import AllergenModel
 from app.models.dish_allergen_model import dish_allergens
+from app.models.table_model import TableModel
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)
