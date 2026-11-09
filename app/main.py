@@ -9,7 +9,13 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.database_connection import engine
-from app.api import test_routes, dish_routes, category_routes, allergen_routes
+from app.api import (
+    allergen_routes,
+    auth_routes,
+    category_routes,
+    dish_routes,
+    test_routes,
+)
 from app.services import reference_service
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -34,6 +40,7 @@ app.include_router(test_routes.router)
 app.include_router(dish_routes.router)
 app.include_router(category_routes.router)
 app.include_router(allergen_routes.router)
+app.include_router(auth_routes.router)
 
 @app.get("/")
 async def root():
