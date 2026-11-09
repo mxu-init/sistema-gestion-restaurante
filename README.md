@@ -93,7 +93,7 @@ Petición Cliente
 ```
 
 ### Reglas Clave de Dominio
-1. **Borrado Lógico (*Soft Delete*):** Platos, menús y usuarios nunca se eliminan físicamente; registran una marca temporal `deleted_at`. Toda consulta del sistema omite de forma transparente los elementos dados de baja.
+1. **Borrado Lógico (*Soft Delete*):** Platos y menús nunca se eliminan físicamente; registran una marca temporal `deleted_at`. Los usuarios nunca se eliminan físicamente tampoco: se desactivan con `is_active = false`, lo que impide iniciar sesión.
 2. **Desactivación vs. Eliminación:** Cambiar `is_available` o `is_active` es una operación operativa reversible (ej. falta puntual de un ingrediente). La eliminación lógica queda reservada con exclusividad al `super_admin`.
 3. **Disponibilidad Computada:** La disponibilidad de una mesa o un menú no se duplica en base de datos; se evalúa dinámicamente según reservas activas y estado de los platos componentes.
 4. **Respuestas de Error Uniformes:** Errores consistentes en español con códigos HTTP normalizados (`401` Unauthorized, `403` Forbidden, `404` Not Found, `409` Conflict, `422` Unprocessable Entity).
@@ -105,13 +105,15 @@ Petición Cliente
 ```text
 sistema-gestion-restaurante/
 ├── alembic/                     # Control de versiones del esquema y datos
-│   ├── versions/                # 8 revisiones: tablas, columna legacy y datos fijos
+│   ├── versions/                # 9 revisiones: tablas, columna legacy y datos fijos
 │   │   ├── c23d2bf3b75a_...     # elimina la columna legacy dishes.allergens
-│   │   └── aacc49216385_...     # inserta categorías base y alérgenos UE
+│   │   ├── aacc49216385_...     # inserta categorías base y alérgenos UE
+│   │   └── 769f71322953_...     # crea la tabla users
 │   ├── env.py                   # Conecta Alembic con los modelos de app/models
 │   └── script.py.mako
 ├── app/
 │   ├── api/                     # Rutas FastAPI (APIRouter) y documentación Swagger
+│   │   ├── auth_routes.py       # Login JWT, usuario actual y listado por rol
 │   │   ├── dish_routes.py       # CRUD de platos y asignación de alérgenos
 │   │   ├── category_routes.py   # Endpoints de categorías de carta
 │   │   ├── allergen_routes.py   # Endpoints de alérgenos
@@ -119,6 +121,7 @@ sistema-gestion-restaurante/
 │   ├── controllers/             # Orquestación de casos de uso
 │   │   └── test_controller.py
 │   ├── services/                # Lógica de negocio y consultas SQLAlchemy
+│   │   ├── auth_service.py      # Validación de credenciales y estado del usuario
 │   │   ├── dish_service.py      # Platos + allergen_ids + selectinload
 │   │   ├── category_service.py
 │   │   ├── allergen_service.py  # Validación y carga de alérgenos por ID
@@ -130,8 +133,10 @@ sistema-gestion-restaurante/
 │   │   ├── dish_model.py        # dishes
 │   │   ├── allergen_model.py    # allergens
 │   │   ├── dish_allergen_model.py # dish_allergens (tabla intermedia)
+│   │   ├── user_model.py        # users
 │   │   └── test_model.py        # test (plantilla)
 │   ├── schemas/                 # Esquemas Pydantic (Create, Update, Response)
+│   │   ├── auth_schema.py       # Token y datos de usuario
 │   │   ├── dish_schema.py
 │   │   ├── category_schema.py
 │   │   ├── allergen_schema.py
@@ -139,10 +144,12 @@ sistema-gestion-restaurante/
 │   ├── core/                    # Configuración global y conexión
 │   │   ├── config.py            # Variables de entorno y ajustes generales
 │   │   ├── database_connection.py # Engine, sesión y get_db
+│   │   ├── security.py          # Hash de contraseñas y creación/lectura de JWT
+│   │   ├── auth_dependencies.py # Usuario actual y control de roles
 │   │   └── reference_data.py    # Categorías base y alérgenos UE (fuente única)
 │   └── main.py                  # Instancia FastAPI, lifespan y registro de routers
 ├── scripts/                     # Scripts de utilidad y validación
-│   ├── seed_data.py             # Carga opcional de los 15 platos de ejemplo
+│   ├── seed_data.py             # Carga opcional: 15 platos y usuarios de prueba
 │   └── check_commit_msg.py      # Verificador de Conventional Commits
 ├── alembic.ini                  # Configuración de Alembic
 ├── .pre-commit-config.yaml      # Hooks de calidad y formato
@@ -199,6 +206,10 @@ DB_NAME=restaurante_erp_db
 DB_USER=postgres
 DB_PASSWORD=tu_password
 DRIVER_NAME=postgresql+psycopg
+
+# Autenticacion JWT
+SECRET_KEY=genera_una_clave_secreta_larga
+ACCESS_TOKEN_EXPIRE_MINUTES=60
 ```
 
 ### 6. Aplicar las Migraciones y los Datos Fijos
@@ -207,10 +218,18 @@ alembic upgrade head
 ```
 Este comando crea el esquema e inserta los **datos fijos**: las 5 categorías base (*Entrantes, Primeros, Segundos, Postres, Bebidas*) y los **14 alérgenos de declaración obligatoria** de la UE. Además, el API los vuelve a comprobar en cada arranque por si faltara alguno.
 
-Carga opcional de los 15 platos de ejemplo:
+Carga opcional de los 15 platos de ejemplo y de los usuarios de prueba:
 ```bash
 python -m scripts.seed_data
 ```
+
+Usuarios creados por el seed:
+
+| Email | Contraseña | Rol | Activo |
+| :--- | :--- | :--- | :--- |
+| `admin@restaurante.com` | `admin123` | admin | sí |
+| `mesero@restaurante.com` | `mesero123` | mesero | sí |
+| `inactivo@restaurante.com` | `inactivo123` | mesero | no |
 
 ### 7. Iniciar el Servidor de Desarrollo
 ```bash
@@ -228,6 +247,16 @@ Una vez iniciado el servidor, accede a la documentación interactiva autogenerad
 
 
 > 💡 **Autenticación en Swagger:** Para consumir endpoints protegidos, pulsa el botón verde **Authorize** en Swagger UI e introduce el token JWT obtenido a través del endpoint `POST /auth/token`.
+
+### Endpoints de autenticación
+
+| Método | Ruta | Acceso | Descripción |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/auth/token` | Público | Devuelve el JWT (el email se envía en el campo `username`) |
+| `GET` | `/auth/me` | Cualquier usuario autenticado | Devuelve los datos del usuario del token |
+| `GET` | `/auth/users` | Solo rol `admin` | Listado de usuarios del sistema |
+
+Credenciales incorrectas, email inexistente o usuario desactivado responden `401` con el mismo mensaje en español: `Credenciales incorrectas`. Un token sin los permisos del rol requerido responde `403`.
 
 ---
 
