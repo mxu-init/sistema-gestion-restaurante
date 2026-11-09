@@ -1,10 +1,29 @@
 from app.core.database_connection import session_local
 from app.core.reference_data import BASE_CATEGORIES
-from app.models import CategoryModel, DishModel
+from app.core.security import get_password_hash
+from app.models import CategoryModel, DishModel, UserModel
+
+INITIAL_USERS = [
+    {"email": "admin@restaurante.com", "password": "admin123", "role": "admin", "is_active": True},
+    {"email": "mesero@restaurante.com", "password": "mesero123", "role": "mesero", "is_active": True},
+    {"email": "inactivo@restaurante.com", "password": "inactivo123", "role": "mesero", "is_active": False},
+]
 
 def run_seed():
     db = session_local()
     try:
+        for user_item in INITIAL_USERS:
+            user_exists = db.query(UserModel).filter(UserModel.email == user_item["email"]).first()
+            if not user_exists:
+                db.add(
+                    UserModel(
+                        email=user_item["email"],
+                        hashed_password=get_password_hash(user_item["password"]),
+                        role=user_item["role"],
+                        is_active=user_item["is_active"],
+                    )
+                )
+
         categories_map = {}
 
         for category_name in BASE_CATEGORIES:
