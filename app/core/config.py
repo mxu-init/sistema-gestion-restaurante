@@ -12,6 +12,10 @@ class Settings (BaseSettings):
     DB_PASSWORD:str
     DRIVER_NAME:str
 
+    SECRET_KEY:str
+    ACCESS_TOKEN_EXPIRE_MINUTES:int = 60
+    JWT_ALGORITHM:str = "HS256"
+
     model_config = SettingsConfigDict(env_file=".env")
 
     @property
