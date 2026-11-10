@@ -12,4 +12,4 @@ class UserModel(Base):
     role = Column(String(20), nullable=False, default="staff")
     is_active = Column(Boolean, nullable=False, default=True, server_default="true")
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    deleted_at = Column(DateTime(timezone=True), nullable=False)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
