@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.controllers import menu_controller
 from app.core.database_connection import get_db
-from app.schemas.menu_schema import MenuCreate, MenuRead
+from app.schemas.menu_schema import MenuCreate, MenuRead, MenuUpdate
 
 router = APIRouter(prefix="/menus", tags=["Menús"])
 
@@ -40,3 +40,17 @@ def read_menus(db: Session = Depends(get_db)):
 def read_menu(menu_id: int, db: Session = Depends(get_db)):
     return menu_controller.get_menu_by_id(db, menu_id)
 
+
+@router.patch(
+    "/{menu_id}",
+    response_model=MenuRead,
+    status_code=status.HTTP_200_OK,
+    summary="Editar un menú",
+    description="Permite modificar el nombre, precio, tipo, día y la lista de platos asociados a un menú.",
+)
+def update_menu(
+    menu_id: int,
+    menu_data: MenuUpdate,
+    db: Session = Depends(get_db),
+):
+    return menu_controller.update_menu(db, menu_id, menu_data)

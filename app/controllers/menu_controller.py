@@ -3,7 +3,7 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from app.models.menu_model import MenuModel
-from app.schemas.menu_schema import MenuCreate
+from app.schemas.menu_schema import MenuCreate, MenuUpdate
 from app.services import menu_service
 
 
@@ -18,3 +18,6 @@ def get_menus(db: Session) -> List[MenuModel]:
 def get_menu_by_id(db: Session, menu_id: int) -> MenuModel:
     return menu_service.fetch_menu_by_id(db, menu_id)
 
+
+def update_menu(db: Session, menu_id: int, menu_data: MenuUpdate) -> MenuModel:
+    return menu_service.update_menu(db, menu_id, menu_data)

@@ -17,6 +17,7 @@ class MenuModel(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     type = Column(String(50), nullable=False)
+    day = Column(String(50), nullable=True)
     price = Column(Numeric(8, 2), nullable=False)
     is_available = Column(Boolean, nullable=False, default=True, server_default="true")
     deleted_at = Column(DateTime(timezone=True), nullable=True)
