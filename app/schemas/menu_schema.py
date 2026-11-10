@@ -1,7 +1,7 @@
 from decimal import Decimal
-from typing import List, Optional
+from typing import Any, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class MenuDishRead(BaseModel):
@@ -10,6 +10,7 @@ class MenuDishRead(BaseModel):
     id: int
     name: str
     price: Decimal
+    is_available: bool = True
 
 
 class MenuCreate(BaseModel):
@@ -42,6 +43,7 @@ class MenuUpdate(BaseModel):
     day: Optional[str] = Field(None, max_length=50)
     price: Optional[Decimal] = Field(None, ge=0, max_digits=8, decimal_places=2)
     dish_ids: Optional[List[int]] = Field(None, min_length=1)
+    is_available: Optional[bool] = None
 
     @field_validator("name", "type", mode="after")
     @classmethod
@@ -62,6 +64,10 @@ class MenuUpdate(BaseModel):
         return value
 
 
+class MenuAvailabilityUpdate(BaseModel):
+    is_available: bool = Field(..., description="Estado de disponibilidad manual del menú")
+
+
 class MenuRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -72,3 +78,23 @@ class MenuRead(BaseModel):
     price: Decimal
     is_available: bool
     dishes: List[MenuDishRead]
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def wrap_validation(cls, data: Any, handler):
+        instance = handler(data)
+        if hasattr(data, "is_effectively_available"):
+            instance.is_available = bool(data.is_effectively_available)
+        elif hasattr(data, "dishes") and hasattr(data, "is_available"):
+            dishes = getattr(data, "dishes", [])
+            manual_avail = getattr(data, "is_available", True)
+            instance.is_available = (
+                bool(manual_avail)
+                and len(dishes) > 0
+                and all(
+                    getattr(d, "is_available", False)
+                    and getattr(d, "deleted_at", None) is None
+                    for d in dishes
+                )
+            )
+        return instance

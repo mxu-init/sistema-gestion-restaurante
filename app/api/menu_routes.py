@@ -1,11 +1,16 @@
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.controllers import menu_controller
 from app.core.database_connection import get_db
-from app.schemas.menu_schema import MenuCreate, MenuRead, MenuUpdate
+from app.schemas.menu_schema import (
+    MenuAvailabilityUpdate,
+    MenuCreate,
+    MenuRead,
+    MenuUpdate,
+)
 
 router = APIRouter(prefix="/menus", tags=["Menús"])
 
@@ -25,10 +30,15 @@ def create_menu(menu_data: MenuCreate, db: Session = Depends(get_db)):
     "",
     response_model=List[MenuRead],
     summary="Listar menús",
-    description="Devuelve todos los menús que no han sido eliminados.",
+    description="Devuelve los menús no eliminados, con opción de filtrar por disponibilidad efectiva.",
 )
-def read_menus(db: Session = Depends(get_db)):
-    return menu_controller.get_menus(db)
+def read_menus(
+    is_available: Optional[bool] = Query(
+        None, description="Filtrar por disponibilidad efectiva del menú"
+    ),
+    db: Session = Depends(get_db),
+):
+    return menu_controller.get_menus(db, is_available=is_available)
 
 
 @router.get(
@@ -54,3 +64,31 @@ def update_menu(
     db: Session = Depends(get_db),
 ):
     return menu_controller.update_menu(db, menu_id, menu_data)
+
+
+@router.patch(
+    "/{menu_id}/availability",
+    response_model=MenuRead,
+    status_code=status.HTTP_200_OK,
+    summary="Cambiar disponibilidad de un menú",
+    description="Permite activar o desactivar la disponibilidad manual de un menú.",
+)
+def update_menu_availability(
+    menu_id: int,
+    availability_data: MenuAvailabilityUpdate,
+    db: Session = Depends(get_db),
+):
+    return menu_controller.update_menu_availability(
+        db, menu_id, availability_data.is_available
+    )
+
+
+@router.delete(
+    "/{menu_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Eliminar un menú",
+    description="Realiza un borrado lógico del menú estableciendo deleted_at.",
+)
+def delete_menu(menu_id: int, db: Session = Depends(get_db)):
+    menu_controller.delete_menu(db, menu_id)
+    return None

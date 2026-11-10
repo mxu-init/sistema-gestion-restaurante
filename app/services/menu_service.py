@@ -1,11 +1,16 @@
-from typing import List
+from datetime import datetime, timezone
+from typing import List, Optional
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.models.dish_model import DishModel
 from app.models.menu_model import MenuModel
 from app.schemas.menu_schema import MenuCreate, MenuUpdate
+
+
+def is_menu_effectively_available(menu: MenuModel) -> bool:
+    return menu.is_effectively_available
 
 
 def fetch_dishes_by_ids(db: Session, dish_ids: List[int]) -> List[DishModel]:
@@ -49,14 +54,17 @@ def create_menu(db: Session, menu_data: MenuCreate) -> MenuModel:
     return menu
 
 
-def fetch_menus(db: Session) -> List[MenuModel]:
-    return (
+def fetch_menus(db: Session, is_available: Optional[bool] = None) -> List[MenuModel]:
+    menus = (
         db.query(MenuModel)
         .options(selectinload(MenuModel.dishes))
         .filter(MenuModel.deleted_at.is_(None))
         .order_by(MenuModel.id)
         .all()
     )
+    if is_available is not None:
+        menus = [menu for menu in menus if is_menu_effectively_available(menu) == is_available]
+    return menus
 
 
 def fetch_menu_by_id(db: Session, menu_id: int) -> MenuModel:
@@ -86,3 +94,22 @@ def update_menu(db: Session, menu_id: int, menu_data: MenuUpdate) -> MenuModel:
     db.commit()
     db.refresh(menu)
     return menu
+
+
+def update_menu_availability(db: Session, menu_id: int, is_available: bool) -> MenuModel:
+    menu = fetch_menu_by_id(db, menu_id)
+    menu.is_available = is_available
+    db.commit()
+    db.refresh(menu)
+    return menu
+
+
+def soft_delete_menu(db: Session, menu_id: int) -> None:
+    menu = db.query(MenuModel).filter(MenuModel.id == menu_id).first()
+    if menu is None:
+        raise NotFoundError("El menú no existe")
+    if menu.deleted_at is not None:
+        raise ConflictError("El menú ya ha sido eliminado")
+
+    menu.deleted_at = datetime.now(timezone.utc)
+    db.commit()
