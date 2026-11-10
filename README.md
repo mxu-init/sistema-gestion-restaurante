@@ -231,6 +231,10 @@ Usuarios creados por el seed:
 | `mesero@restaurante.com` | `mesero123` | mesero | sí |
 | `inactivo@restaurante.com` | `inactivo123` | mesero | no |
 
+> ⚠️ **Solo entorno de desarrollo:** estos usuarios son ficticios y los crea la
+> seed opcional. Nunca ejecutes `scripts/seed_data.py` en producción y cambia
+> todas las contraseñas antes de cualquier despliegue real.
+
 ### 7. Iniciar el Servidor de Desarrollo
 ```bash
 uvicorn app.main:app --reload
