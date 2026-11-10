@@ -12,6 +12,10 @@ class Settings (BaseSettings):
     DB_PASSWORD:str
     DRIVER_NAME:str
 
+    SUPER_ADMIN_NAME: str
+    SUPER_ADMIN_EMAIL: str
+    SUPER_ADMIN_PASSWORD: str
+
     model_config = SettingsConfigDict(env_file=".env")
 
     @property
