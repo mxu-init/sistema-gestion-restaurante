@@ -24,3 +24,10 @@ class MenuModel(Base):
 
     dishes = relationship("DishModel", secondary=menu_dishes)
 
+    @property
+    def is_effectively_available(self) -> bool:
+        if not self.is_available or not self.dishes:
+            return False
+        return all(
+            dish.is_available and dish.deleted_at is None for dish in self.dishes
+        )
