@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 import os
+from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
 from fastapi.openapi.utils import get_openapi
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
@@ -20,6 +23,16 @@ from app.core.database_connection import engine
 from app.core.handlers import register_exception_handlers
 from app.core.logging_config import CorrelationIdMiddleware, configure_logging
 from app.schemas.errors import COMMON_ERROR_RESPONSES, ErrorResponse
+from app.services import reference_service
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+STATIC_DIR = BASE_DIR / "static"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    reference_service.ensure_reference_data_on_startup()
+    yield
 
 
 def configure_openapi(app_instance: FastAPI) -> None:
@@ -81,15 +94,16 @@ def create_app() -> FastAPI:
         title=settings.APP_NAME,
         version=settings.APP_VERSION,
         description=settings.APP_DESCRIPTION,
+        lifespan=lifespan,
         responses=COMMON_ERROR_RESPONSES,
     )
 
     application.add_middleware(CorrelationIdMiddleware)
     register_exception_handlers(application)
 
-    os.makedirs("static/uploads", exist_ok=True)
+    os.makedirs(STATIC_DIR / "uploads", exist_ok=True)
     application.mount(
-        "/static", StaticFiles(directory="static"), name="static"
+        "/static", StaticFiles(directory=str(STATIC_DIR)), name="static"
     )
 
     application.include_router(test_routes.router)
@@ -101,6 +115,14 @@ def create_app() -> FastAPI:
     @application.get("/")
     async def root() -> str:
         return "API Template"
+
+    @application.get("/favicon.ico", include_in_schema=False)
+    @application.get("/docs/favicon.ico", include_in_schema=False)
+    def favicon() -> Response:
+        favicon_path = STATIC_DIR / "favicon.ico"
+        if favicon_path.is_file():
+            return FileResponse(favicon_path)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @application.get("/health", tags=["Health"])
     def health() -> dict[str, str]:

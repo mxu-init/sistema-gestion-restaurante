@@ -4,6 +4,7 @@ Verifica el flujo completo contra la base de datos PostgreSQL local (`sgr_db`):
   a. SQLSTATE 23505 (Unique Violation) -> ConflictError (HTTP 409) con `{"detail": "Ya existe..."}`.
   b. SQLSTATE 23503 (Foreign Key Violation) -> ConflictError (HTTP 409) con mensaje en español sin filtrar SQL ni nombres de tablas.
   c. Rollback de sesión en `handle_db_exceptions` y `handle_async_db_exceptions` para evitar `PendingRollbackError`.
+  d. Integración de `create_app()` con `lifespan` (`ensure_reference_data_on_startup`), `/favicon.ico`, `/health`, `/health/db` y rutas existentes.
 """
 
 from __future__ import annotations
@@ -29,7 +30,9 @@ from app.core.error_translations import (
 from app.core.exceptions import ConflictError
 from app.core.handlers import register_exception_handlers
 from app.core.logging_config import CorrelationIdMiddleware
-from app.models.dish_model import CategoryModel, DishModel
+from app.core.reference_data import BASE_CATEGORIES, EU_ALLERGENS
+from app.main import create_app
+from app.models import CategoryModel, DishModel
 from app.schemas.category_schema import CategoryCreate
 from app.schemas.dish_schema import DishCreate
 from app.schemas.errors import COMMON_ERROR_RESPONSES
@@ -86,7 +89,6 @@ def integration_app(db_session: Session) -> FastAPI:
                 price=payload.price or 10.0,
                 category_id=payload.category_id,
                 is_available=payload.is_available,
-                allergens=payload.allergens,
             )
             db.add(dish)
             db.commit()
@@ -197,7 +199,6 @@ def test_sqlstate_23503_foreign_key_violation_translates_to_409_without_sql_leak
             "price": 14.50,
             "category_id": non_existent_category_id,
             "is_available": True,
-            "allergens": "Gluten",
         },
     )
 
@@ -318,3 +319,47 @@ def test_session_rollback_on_sync_and_async_handlers_prevents_pending_rollback_e
         ).delete(synchronize_session=False)
         db_session.commit()
 
+
+def test_create_app_lifespan_reference_data_and_dev_endpoints(
+    db_session: Session,
+) -> None:
+    """d. Verifica que create_app() preserve el lifespan de dev, datos de referencia, favicon, health y routers."""
+    application = create_app()
+    with TestClient(application, raise_server_exceptions=False) as app_client:
+        # 1. Endpoints de estado y estáticos de dev
+        health_resp = app_client.get("/health")
+        assert health_resp.status_code == 200
+        assert health_resp.json() == {"status": "ok"}
+        assert "X-Request-ID" in health_resp.headers
+
+        db_health_resp = app_client.get("/health/db")
+        assert db_health_resp.status_code == 200
+        assert db_health_resp.json() == {"message": "Conexión a la base de datos exitosa"}
+
+        favicon_resp = app_client.get("/favicon.ico")
+        assert favicon_resp.status_code in {200, 204}
+        assert "X-Request-ID" in favicon_resp.headers
+
+        docs_favicon_resp = app_client.get("/docs/favicon.ico")
+        assert docs_favicon_resp.status_code in {200, 204}
+        assert "X-Request-ID" in docs_favicon_resp.headers
+
+        # 2. Verificar que lifespan cargó/verificó categorías base y alérgenos UE
+        categories_resp = app_client.get("/categories/")
+        assert categories_resp.status_code == 200
+        category_names = {item["name"] for item in categories_resp.json()}
+        assert set(BASE_CATEGORIES).issubset(category_names)
+
+        allergens_resp = app_client.get("/allergens/")
+        assert allergens_resp.status_code == 200
+        allergen_names = {item["name"] for item in allergens_resp.json()}
+        assert set(EU_ALLERGENS).issubset(allergen_names)
+
+        # 3. Verificar manejo de errores HTTP 404 en rutas reales de dev con X-Request-ID
+        not_found_dish = app_client.get(
+            "/dishes/999999999",
+            headers={"X-Request-ID": "trace-dev-404"},
+        )
+        assert not_found_dish.status_code == 404
+        assert not_found_dish.headers.get("X-Request-ID") == "trace-dev-404"
+        assert not_found_dish.json() == {"detail": "Plato no encontrado"}

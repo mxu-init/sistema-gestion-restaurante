@@ -69,5 +69,6 @@ result*.txt
 
 # Archivos multimedia y documentación de presentación interna
 *.mp4
-docs/
-
+docs/*
+!docs/architecture/
+!docs/architecture/**
