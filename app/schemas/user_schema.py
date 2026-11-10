@@ -14,7 +14,7 @@ class UserCreate(UserBase):
     password: str = Field(..., min_length=6, max_length=100)
 
 
-class UserUpdate(UserBase):
+class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     email: Optional[EmailStr] = None
     role: Optional[str] = Field(None, pattern="^(super_admin|manager|staff)$")
