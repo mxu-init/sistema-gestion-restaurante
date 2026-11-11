@@ -62,7 +62,7 @@ def handle_conflict_error(request: Request, exc: ConflictError):
         content={"detail": exc.message},
     )
 
-@app.get("/")
+@app.get("/", summary="Inicio de la API", description="Mensaje de bienvenida de la API.")
 async def root():
     return "API Template"
 
@@ -72,11 +72,21 @@ def favicon():
     favicon_path = STATIC_DIR / "favicon.ico"
     return FileResponse(favicon_path)
 
-@app.get("/health", tags=["Health"])
+@app.get(
+    "/health",
+    tags=["Salud"],
+    summary="Estado del servicio",
+    description="Confirma que el servicio está en línea.",
+)
 def health():
     return {"status": "ok"}
 
-@app.get("/health/db", tags=["Health"])
+@app.get(
+    "/health/db",
+    tags=["Salud"],
+    summary="Verificar conexión a la base de datos",
+    description="Ejecuta una consulta simple para comprobar la conexión con PostgreSQL.",
+)
 def check_database():
     with engine.connect() as connection:
         connection.execute(text("SELECT 1"))

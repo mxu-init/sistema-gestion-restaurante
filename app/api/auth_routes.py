@@ -10,10 +10,16 @@ from app.schemas.auth_schema import TokenResponse
 from app.schemas.user_schema import UserResponse
 from app.services import auth_service
 
-router = APIRouter(prefix="/auth", tags=["Auth"])
+router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
 
-@router.post("/token", response_model=TokenResponse, status_code=status.HTTP_200_OK)
+@router.post(
+    "/token",
+    response_model=TokenResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Iniciar sesión",
+    description="Valida el email y la contraseña y devuelve un token JWT (bearer) para usar en las peticiones autenticadas.",
+)
 def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
@@ -29,12 +35,22 @@ def login_for_access_token(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get(
+    "/me",
+    response_model=UserResponse,
+    summary="Obtener el usuario actual",
+    description="Devuelve el perfil del usuario correspondiente al token enviado.",
+)
 def read_current_user(current_user: UserModel = Depends(get_current_user)):
     return current_user
 
 
-@router.get("/users", response_model=list[UserResponse])
+@router.get(
+    "/users",
+    response_model=list[UserResponse],
+    summary="Listar usuarios",
+    description="Devuelve todos los usuarios registrados. Requiere rol admin o super_admin.",
+)
 def read_users(
     admin_user: UserModel = Depends(require_role("admin")),
     db: Session = Depends(get_db),
