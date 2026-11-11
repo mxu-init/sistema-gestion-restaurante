@@ -8,7 +8,15 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from app.core.config import settings
 from app.core.database_connection import Base
-from app.models import CategoryModel, DishModel, AllergenModel, dish_allergens, UserModel
+from app.models import (
+    CategoryModel,
+    DishModel,
+    AllergenModel,
+    dish_allergens,
+    UserModel,
+    MenuModel,
+    menu_dishes,
+)
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

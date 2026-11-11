@@ -2,8 +2,8 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request, status
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
@@ -14,9 +14,11 @@ from app.api import (
     auth_routes,
     category_routes,
     dish_routes,
+    menu_routes,
     test_routes,
 )
 from app.services import reference_service
+from app.core.exceptions import NotFoundError, ConflictError
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -41,6 +43,23 @@ app.include_router(dish_routes.router)
 app.include_router(category_routes.router)
 app.include_router(allergen_routes.router)
 app.include_router(auth_routes.router)
+app.include_router(menu_routes.router)
+
+
+@app.exception_handler(NotFoundError)
+def handle_not_found_error(request: Request, exc: NotFoundError):
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={"detail": exc.message},
+    )
+
+
+@app.exception_handler(ConflictError)
+def handle_conflict_error(request: Request, exc: ConflictError):
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={"detail": exc.message},
+    )
 
 @app.get("/")
 async def root():
