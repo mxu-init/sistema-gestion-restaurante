@@ -65,7 +65,7 @@ There is no menu test module on `dev`. Menu registration was checked through the
 | `f1c2d8d2685b1ac27fc8ed32f46490fc34acd6fd` | `test(api): confirm menu routes stay registered after dev merge` | OpenAPI assertion for the menu routes. |
 | `aece58d4b55ad17b74242334219b7bf52456e002` | `test(bdd): add focused Gherkin scenarios for SGR-49` | Six Pytest-BDD scenarios and `pytest-bdd==9.0.1`. |
 
-The commit that adds this file is `docs(integration): document dev synchronization and SGR-49 BDD coverage`.
+This file was added in `082e1b13d090d5026a57731890b80c6fd2d7b90e`, `docs(integration): document dev synchronization and SGR-49 BDD coverage`.
 
 ## 8. Remaining limitations
 
