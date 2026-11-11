@@ -50,13 +50,3 @@ async def root():
 def favicon():
     favicon_path = STATIC_DIR / "favicon.ico"
     return FileResponse(favicon_path)
-
-@app.get("/health", tags=["Health"])
-def health():
-    return {"status": "ok"}
-
-@app.get("/health/db", tags=["Health"])
-def check_database():
-    with engine.connect() as connection:
-        connection.execute(text("SELECT 1"))
-    return {"message": "Conexión a la base de datos exitosa"}
