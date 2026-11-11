@@ -35,14 +35,14 @@ En una aplicación backend empresarial orientada a la gestión operativa de un r
    - Si ocurría un fallo de integridad en PostgreSQL (`IntegrityError` por clave duplicada o clave foránea inexistente) no previsto manualmente con un `SELECT` previo, o un error inesperado en tiempo de ejecución, la aplicación podía devolver un error `500` no estandarizado o dejar la sesión de SQLAlchemy en estado inválido (`PendingRollbackError`).
 2. **Acoplamiento entre lógica de negocio y protocolo HTTP:**
    - Las validaciones de negocio se realizaban directamente en las rutas (`app/api/dish_routes.py`, `app/api/category_routes.py`) lanzando `fastapi.HTTPException`. Esto dificulta reutilizar la capa de servicios (`app/services/`) desde scripts CLI, tareas programadas o tests unitarios sin depender de FastAPI/Starlette.
-3. **Ausencia de trazabilidad (`X-Request-ID`) y sanitización de logs:**
-   - No existía un identificador único de correlación por petición (`correlation_id`) ni un formateador estructurado que enmascarase automáticamente contraseñas, tokens JWT o cadenas de conexión (`DATABASE_URL` / DSN) antes de escribir en la salida estándar.
+3. **Ausencia de trazabilidad (`X-Request-ID`) y sanitización estructurada de logs:**
+   - No existía un identificador único de correlación por petición (`correlation_id`) ni un formateador JSON para el logger de la aplicación que enmascarase claves sensibles, tokens `Bearer` o cadenas de conexión (`DATABASE_URL` / DSN).
 4. **Esquema OpenAPI 3.1 desalineado con las respuestas reales:**
    - Swagger UI (`/docs`) documentaba por defecto el esquema `HTTPValidationError` para los códigos `422` y carecía de un catálogo uniforme de respuestas `400`, `401`, `403`, `404`, `409`, `422` y `500`.
 
 ### 1.2. ¿Por qué el Pull Request original generaba conflictos?
 
-El Pull Request original (**PR #6**) fue abierto inicialmente apuntando por error a `main` y se construyó sobre el commit `abe6b6f` (*Merge pull request #7 from mxu-init/feat/SGR-70-allergen-model*). Mientras tanto:
+El Pull Request original (**PR #6**) apuntaba inicialmente a `main` y se construyó sobre el commit `abe6b6f` (*Merge pull request #7 from mxu-init/feat/SGR-70-allergen-model*). Mientras tanto:
 - En `origin/dev` se fusionó el **PR #9** (`refactor/code-refinement`, commit `daac6dd`), que modificó 17 archivos: introdujo el gestor de ciclo de vida `lifespan` con inicialización automática de datos de referencia (`reference_service.ensure_reference_data_on_startup()`), configuró rutas absolutas para archivos estáticos (`STATIC_DIR`), añadió el endpoint `/favicon.ico`, dividió los modelos SQLAlchemy en archivos independientes con un paquete `app/models/__init__.py` y reemplazó la antigua columna de texto `dishes.allergens` por una relación muchos-a-muchos (`dish_allergens`).
 - Como tanto el PR #9 en `dev` como `feat/errors-handler` modificaron sustancialmente `app/main.py` (uno añadiendo `lifespan` y `STATIC_DIR`, y el otro introduciendo la factoría `create_app()`, middlewares y manejadores de errores), Git detectó un conflicto de contenido directo en `app/main.py`.
 
@@ -50,17 +50,19 @@ El Pull Request original (**PR #6**) fue abierto inicialmente apuntando por erro
 
 Siguiendo el flujo de trabajo Gitflow del equipo:
 - **`origin/dev`** es la rama principal de integración continua donde convergen todas las funcionalidades verificadas del sprint (como el catálogo de alérgenos SGR-70 y el refinamiento de arquitectura del PR #9).
-- **`origin/main`** está reservada para entregas estables de producción/release. De hecho, la auditoría de ramas demostró que `origin/main` recibió dos commits directos accidentales (`266af6a` y `daeb2d2`) que corresponden a una funcionalidad en curso que ya tiene su propio PR abierto hacia `dev` (**PR #10**, `feature/sgr-23-tables-crud` → `dev`).
-- Por tanto, fusionar en `main` rompería la disciplina de ramas del proyecto y mezclaría código sin pasar por la validación conjunta en `dev`.
+- **`origin/main`** está reservada para entregas estables. Además, la auditoría del repositorio mostró que `origin/main` contiene dos commits posteriores a `abe6b6f` que no están en `origin/dev`: `266af6a` (`fix: CRUD table`, que implementa el CRUD de mesas y cuenta con su propio PR abierto hacia `dev` en el **PR #10**, `feature/sgr-23-tables-crud` → `dev`) y `daeb2d2` (`first commit`, que añade la línea `# MYWARFRAME` al final de `README.md`).
+- Por tanto, fusionar en `main` omitiría la rama de integración `dev` y mezclaría cambios ajenos a la línea base actual del equipo.
 
 ### 1.4. Mejoras arquitectónicas propuestas y resultado final
 
 La integración realizada en `feat/errors-handler` sobre la base actual de `origin/dev` logra:
-- **Contrato único de error en español (`ErrorResponse`):** Todo error `4xx` o `5xx` (incluyendo validaciones Pydantic `422` y errores de base de datos) responde exclusivamente con `{"detail": "Mensaje claro en español"}`.
-- **Preservación total de la funcionalidad de `dev`:** Se mantienen intactos el `lifespan` de arranque (`ensure_reference_data_on_startup`), `STATIC_DIR`, `/favicon.ico`, `/docs/favicon.ico`, `/health`, `/health/db` y todos los routers existentes (`dishes`, `categories`, `allergens`, `test`).
-- **Jerarquía de excepciones de dominio agnóstica al transporte (`AppError`):** Permite que los servicios lancen errores semánticos (`NotFoundError`, `ConflictError`, `DomainValidationError`, etc.) sin importar FastAPI, manteniendo a la vez total retrocompatibilidad con las rutas actuales que aún lanzan `HTTPException`.
-- **Traducción automática de errores de PostgreSQL (`SQLSTATE`) y rollback garantizado:** Evita fugas de detalles SQL y previene el bloqueo de sesiones por `PendingRollbackError`.
-- **Middleware ASGI puro (`CorrelationIdMiddleware`) y Logging JSON con redacción de secretos (`[REDACTED]`).**
+- **Contrato único de error en español (`ErrorResponse`):** Todo error `4xx` o `5xx` (incluyendo validaciones Pydantic `422` y errores de base de datos) responde exclusivamente con `{"detail": "Mensaje claro en español"}`. Esto supone un cambio intencional del contrato HTTP `422` respecto al array en inglés que devuelve FastAPI por defecto.
+- **Preservación de la funcionalidad operativa de `dev`:** Se mantienen intactos el `lifespan` de arranque (`ensure_reference_data_on_startup`), `STATIC_DIR`, `/favicon.ico` (mejorado para devolver `204 No Content` si el archivo no existe en disco), `/docs/favicon.ico`, `/health`, `/health/db` y todos los routers existentes (`dishes`, `categories`, `allergens`, `test`).
+- **Jerarquía de excepciones de dominio agnóstica al transporte (`AppError`) y convivencia con `HTTPException`:** Permite que los servicios lancen errores semánticos (`NotFoundError`, `ConflictError`, `DomainValidationError`, etc.) sin importar FastAPI. Las rutas existentes que lanzan `HTTPException` con mensajes en español siguen funcionando sin cambios en su código, mientras que los mensajes por defecto en inglés (como `"Not Found"` o `"Unauthorized"`) se traducen automáticamente al español.
+- **Doble nivel de protección ante errores de PostgreSQL (`SQLSTATE`):**
+  1. El manejador global `sqlalchemy_exception_handler` actúa como red de seguridad para cualquier `SQLAlchemyError` no capturado, traduciendo códigos `SQLSTATE` a respuestas HTTP seguras (`409`, `422`, `503`, `500`) sin filtrar SQL.
+  2. Los gestores de contexto `handle_db_exceptions(session)` y `handle_async_db_exceptions(session)` ejecutan explícitamente `session.rollback()` sobre la sesión activa antes de propagar la excepción traducida, evitando que la sesión quede bloqueada en estado `PendingRollbackError` si se reutiliza.
+- **Middleware ASGI puro (`CorrelationIdMiddleware`) y Logging JSON en el logger `"sgr"` con redacción heurística de secretos (`[REDACTED]`).**
 
 ---
 
@@ -170,11 +172,11 @@ La arquitectura resultante combina la solidez operativa de `origin/dev` (lifespa
 
 ### 3.1. Factoría de Aplicación `create_app()` y Preservación de `lifespan`
 
-En lugar de instanciar y mutar `app` de forma dispersa en el nivel superior del archivo, `app/main.py` encapsula el ensamblaje en la función `create_app() -> FastAPI` e inmediatamente expone `app = create_app()` al final del archivo para que `uvicorn app.main:app --reload` funcione exactamente igual que antes.
+En lugar de configurar `app` mediante sentencias sueltas en el nivel superior del archivo, `app/main.py` encapsula el ensamblaje en la función `create_app() -> FastAPI` y, en la última línea del módulo (`app = create_app()`), instancia la aplicación por defecto para que `uvicorn app.main:app --reload` funcione sin cambios.
 
 Dentro de `create_app()`:
-1. Se inicializa el logger estructurado (`configure_logging()`).
-2. Se instancia `FastAPI` pasándole tanto `lifespan=lifespan` (que ejecuta `reference_service.ensure_reference_data_on_startup()`) como `responses=COMMON_ERROR_RESPONSES`.
+1. Se inicializa el logger estructurado de la aplicación (`configure_logging()`, logger `"sgr"`).
+2. Se instancia `FastAPI` pasándole tanto `lifespan=lifespan` (que ejecuta `reference_service.ensure_reference_data_on_startup()` al iniciar el ciclo de vida ASGI) como `responses=COMMON_ERROR_RESPONSES`.
 3. Se registra `CorrelationIdMiddleware` y los manejadores globales con `register_exception_handlers(application)`.
 4. Se asegura la carpeta `STATIC_DIR / "uploads"` y se monta `/static` usando la ruta absoluta `STATIC_DIR`.
 5. Se incluyen todos los routers de `dev` (`test_routes`, `dish_routes`, `category_routes`, `allergen_routes`) más el router de contratos de demostración (`routes.router`).
@@ -183,19 +185,28 @@ Dentro de `create_app()`:
 
 ### 3.2. Evaluación Crítica: Ventajas, Desventajas y Justificación del Diseño
 
-Como arquitectos de software, no debemos asumir que cualquier patrón adicional es automáticamente mejor. A continuación evaluamos críticamente cada decisión introducida por `feat/errors-handler`:
+Como arquitectos de software, no debemos asumir que cualquier patrón adicional es automáticamente una mejora sin matices. A continuación evaluamos críticamente cada decisión introducida por `feat/errors-handler`:
 
-- **¿Está justificada la factoría `create_app()` en un proyecto de este tamaño?**
-  - *Ventajas:* Permite crear instancias limpias y aisladas de la aplicación en los tests automatizados sin compartir estado mutable global ni efectos secundarios de importación; ordena claramente la secuencia de inicialización (logging → instancia con lifespan → middlewares → manejadores de excepciones → archivos estáticos → routers → OpenAPI).
-  - *Inconvenientes / Coste cognitivo:* Añade un nivel de indirección respecto al estilo de script plano que suelen mostrar los tutoriales básicos de FastAPI.
-  - *Veredicto:* **Justificado y recomendable**, siempre que se mantenga `app = create_app()` en la última línea de `app/main.py` para no alterar ningún comando de arranque del equipo (`uvicorn app.main:app --reload`).
+- **¿Está justificada la factoría `create_app()` y qué implicación tiene mantener `app = create_app()` a nivel de módulo?**
+  - *Matiz técnico importante:* Dado que `app = create_app()` permanece en el ámbito global al final de `app/main.py` (línea 141), importar `app.main` **sigue creando la instancia global `app` en tiempo de importación** (ejecutando `configure_logging()`, `os.makedirs(STATIC_DIR / "uploads", exist_ok=True)`, el montaje de `/static` y el registro de routers y manejadores). No obstante, la consulta e inserción de datos de referencia (`ensure_reference_data_on_startup()`) está dentro de `lifespan`, por lo que solo se ejecuta al arrancar el servidor ASGI o al entrar en el bloque `with TestClient(...)`, no al importar el módulo.
+  - *Ventajas reales:* `create_app()` agrupa toda la secuencia de inicialización en una función determinista y permite que las pruebas automatizadas llamen a `create_app()` para construir instancias adicionales de `FastAPI` completamente independientes (con su propia caché `openapi_schema`, sus propios middlewares y sin contaminar la instancia global `app` si un test añade rutas o sobrescribe dependencias).
+  - *Inconvenientes / Coste cognitivo:* Añade un nivel de indirección respecto a un script plano y no evita la creación inicial del objeto global `app` cuando se importa `app.main`.
+  - *Veredicto:* **Justificado y práctico**, ya que aporta aislamiento bajo demanda para los tests mientras mantiene `app = create_app()` para no romper el comando habitual del equipo (`uvicorn app.main:app --reload`).
 - **¿Cómo coexiste `create_app()` con `lifespan`?**
-  - Coexisten de forma nativa: `lifespan` se define a nivel de módulo y se pasa como parámetro `lifespan=lifespan` al constructor `FastAPI(...)` dentro de `create_app()`. Cuando se usa `TestClient(app)` como gestor de contexto (`with TestClient(app) as client:`) o cuando arranca Uvicorn, Starlette ejecuta automáticamente `ensure_reference_data_on_startup()`.
+  - Coexisten de forma nativa: `lifespan` se define a nivel de módulo y se pasa como parámetro `lifespan=lifespan` al constructor `FastAPI(...)` dentro de `create_app()`. Cuando se usa `TestClient` como gestor de contexto (`with TestClient(app) as client:`) o cuando arranca Uvicorn, Starlette ejecuta automáticamente `ensure_reference_data_on_startup()`.
 - **¿Es correcto el diseño de `CorrelationIdMiddleware` como Pure ASGI Middleware?**
-  - *Ventaja clave:* En Starlette/FastAPI, el uso de `BaseHTTPMiddleware` tiene limitaciones conocidas (crea tareas asíncronas adicionales que pueden interferir con `ContextVar` o con la propagación de excepciones hacia los manejadores globales). Implementar `CorrelationIdMiddleware` siguiendo la interfaz ASGI pura (`__call__(self, scope, receive, send)`) es una decisión técnica excelente: intercepta la cabecera `X-Request-ID` a la entrada, la guarda en `correlation_id_ctx` (`ContextVar`) y en `scope["state"]["correlation_id"]`, inyecta la cabecera en el mensaje `http.response.start` y limpia el `ContextVar` en el bloque `finally`.
-- **¿Qué elementos son potencialmente redundantes o requieren atención?**
-  1. **Módulo `app/api/routes.py` (`/errores-demo`):** Añade 5 endpoints bajo el prefijo `/errores-demo` para demostrar y probar interactivamente desde Swagger UI los contratos de error (`403`, `404`, `409`, `422`, `500`). Aunque es muy útil durante el desarrollo y revisión de `SGR-49`, en una fase posterior de producción podría ocultarse de Swagger (`include_in_schema=settings.DEBUG`) o trasladarse exclusivamente a los fixtures de tests.
-  2. **Defensa en `/favicon.ico`:** En `origin/dev`, la función `favicon()` devolvía directamente `FileResponse(STATIC_DIR / "favicon.ico")`. Sin embargo, el archivo físico `static/favicon.ico` no está versionado en el repositorio. Sin manejador global, un archivo inexistente falla internamente; con el manejador global de excepciones activo, `FileResponse` lanza `RuntimeError("File at path ... does not exist")`, que se convierte en un error `500`. Durante nuestra integración detectamos este detalle mediante las pruebas automatizadas y mejoramos `favicon()` para verificar `if favicon_path.is_file(): return FileResponse(favicon_path)` y devolver `204 No Content` cuando el icono no exista en disco.
+  - *Ventaja clave:* En Starlette/FastAPI, `BaseHTTPMiddleware` tiene limitaciones conocidas con `ContextVar` y con la propagación de excepciones. Implementar `CorrelationIdMiddleware` siguiendo la interfaz ASGI pura (`__call__(self, scope, receive, send)`) intercepta la cabecera `X-Request-ID` a la entrada, la guarda en `correlation_id_ctx` (`ContextVar`) y en `scope["state"]["correlation_id"]`, inyecta la cabecera en el mensaje `http.response.start` y limpia el `ContextVar` en el bloque `finally`.
+- **¿Cuál es la diferencia exacta entre el manejador global de SQLAlchemy y `handle_db_exceptions(session)`?**
+  - **Traducción global (`sqlalchemy_exception_handler` en `app/core/handlers.py`):** Recibe únicamente `(request: Request, exc: SQLAlchemyError)`. Traduce el error de SQLAlchemy/PostgreSQL en una subclase de `AppError` y devuelve la respuesta JSON estandarizada (`409`, `422`, `503` o `500`), evitando fugas de detalles SQL al cliente. Sin embargo, al no tener referencia al objeto `Session` local del endpoint, **no ejecuta `session.rollback()` por sí mismo** (la sesión solo se cierra al finalizar la dependencia `get_db()` en su bloque `finally: db.close()`).
+  - **Rollback específico de sesión (`handle_db_exceptions(session)` y `handle_async_db_exceptions(session)` en `app/core/error_translations.py`):** Es un gestor de contexto que envuelve las operaciones de base de datos recibiendo explícitamente la `Session` activa. Si ocurre un `SQLAlchemyError`, **invoca inmediatamente `session.rollback()`** sobre esa sesión antes de lanzar la excepción de dominio traducida, permitiendo reutilizar la misma sesión en el mismo ámbito sin sufrir `PendingRollbackError`.
+- **¿Cuáles son el alcance y las limitaciones de la redacción de secretos en logs?**
+  - `redact_sensitive_data()` y `StructuredJsonFormatter` (en `app/core/logging_config.py`) enmascaran recursivamente claves de diccionarios cuyos nombres coincidan con `_SENSITIVE_KEYS` o contengan subcadenas de `_SENSITIVE_KEY_SUBSTRINGS` (`password`, `secret`, `token`, `api_key`, `authorization`, `dsn`, `database_url`, etc.), y aplican dos expresiones regulares sobre cadenas de texto para ocultar URIs de conexión (`postgresql://`, `mysql://`, `sqlite://`, `redis://`, `amqp://`) y cabeceras `Bearer <token>`. Además, `unhandled_exception_handler` no incluye `str(exc)` ni el traceback en texto libre dentro del JSON emitido, sino únicamente `exception_type`.
+  - *Limitaciones a tener en cuenta:*
+    1. La redacción basada en patrones es heurística: secretos arbitrarios concatenados en mensajes de texto libre que no tengan formato de URI (`scheme://...`) ni `Bearer ...`, o almacenados dentro de objetos personalizados que no sean `Mapping`, `list`, `tuple` o `str`, no serán detectados automáticamente.
+    2. `configure_logging()` configura exclusivamente el logger `"sgr"` (`logging.getLogger("sgr")`). Otros loggers del entorno (como el logger de SQLAlchemy cuando `echo=True` en `app/core/database_connection.py`, los loggers de acceso de Uvicorn o los loggers creados con `logging.getLogger(__name__)` en otros módulos como `reference_service.py`) no pasan automáticamente por `StructuredJsonFormatter`.
+- **¿Qué otros elementos requieren atención?**
+  1. **Módulo `app/api/routes.py` (`/errores-demo`):** Añade 5 endpoints bajo `/errores-demo` para verificar desde Swagger UI los contratos de error (`403`, `404`, `409`, `422`, `500`). En producción convendrá condicionarlo a `settings.DEBUG` o moverlo a los fixtures de pruebas.
+  2. **Defensa en `/favicon.ico`:** En `origin/dev`, `favicon()` devolvía `FileResponse(STATIC_DIR / "favicon.ico")` sin verificar si el archivo existía en disco. Como `static/favicon.ico` no está versionado en Git, `FileResponse` lanzaba `RuntimeError` cuando el archivo no existía. Se actualizó `favicon()` para comprobar `if favicon_path.is_file(): return FileResponse(favicon_path)` y devolver `204 No Content` en caso contrario.
 
 ### 3.3. Diagrama de la Arquitectura Integrada Propuesta
 
@@ -224,25 +235,27 @@ Como arquitectos de software, no debemos asumir que cualquier patrón adicional 
          v (Fallo de validación Pydantic)                            v (Ejecución de Ruta / Servicio)
 +-----------------------------------------+       +-------------------------------------------+
 | request_validation_error_handler (422)  |       | Routers (dishes, categories, allergens)   |
-|  - Extrae solo el campo hoja            |       | Services + handle_db_exceptions(session)  |
+|  - Extrae solo el campo hoja            |       | Services:                                 |
 |  - Traduce el motivo al español         |       |  - Lanza HTTPException o AppError         |
-|  - Oculta 'input' y nombres de clases   |       |  - En error SQL: session.rollback() +     |
-+--------------------+--------------------+       |    traduce SQLSTATE (23505, 23503...)     |
+|  - Oculta 'input' y nombres de clases   |       |  - Si usa handle_db_exceptions(session):  |
++--------------------+--------------------+       |    ejecuta session.rollback() + traduce   |
+                     |                            |    SQLSTATE (23505, 23503...) a AppError  |
                      |                            +---------------------+---------------------+
                      |                                                  |
                      |                            +---------------------+---------------------+
                      |                            | Excepción capturada por handlers.py:      |
                      |                            |  - app_error_handler (403/404/409/422/503)|
                      |                            |  - http_exception_handler (4xx/5xx)       |
-                     |                            |  - sqlalchemy_exception_handler           |
+                     |                            |  - sqlalchemy_exception_handler (traduce  |
+                     |                            |    SQLAlchemyError sin rollback directo)  |
                      |                            |  - unhandled_exception_handler (500)      |
                      +----------------------------+---------------------+---------------------+
                                                                         |
                                                                         v
 +-----------------------------------------------------------------------------+
-|                 StructuredJsonFormatter + redact_sensitive_data             |
+|       StructuredJsonFormatter (logger "sgr") + redact_sensitive_data        |
 |  - Registra JSON con timestamp, level, correlation_id, error_code, context  |
-|  - Enmascara passwords, tokens, API keys y DSNs con "[REDACTED]"            |
+|  - Enmascara claves sensibles, tokens Bearer y URIs DSN con "[REDACTED]"    |
 +--------------------------------------+--------------------------------------+
                                        |
                                        v
@@ -255,26 +268,26 @@ Como arquitectos de software, no debemos asumir que cualquier patrón adicional 
 
 ## 4. Comparativa Arquitectónica: Antes vs. Después
 
-La siguiente tabla resume las diferencias arquitectónicas entre el estado actual de `origin/dev` y la arquitectura integrada en `feat/errors-handler`:
+La siguiente tabla resume las diferencias arquitectónicas entre el estado actual de `origin/dev` y la arquitectura integrada en `feat/errors-handler`, incluyendo tanto sus ventajas como sus compromisos técnicos (*trade-offs*):
 
-| Área Arquitectónica | Estado Actual en `origin/dev` | Arquitectura Propuesta (`feat/errors-handler` + `dev`) | Beneficio Técnico para el Equipo |
+| Área Arquitectónica | Estado Actual en `origin/dev` | Arquitectura Propuesta (`feat/errors-handler` + `dev`) | Beneficio Técnico y Compromisos (*Trade-offs*) |
 | :--- | :--- | :--- | :--- |
-| **Inicialización de la App (`app/main.py`)** | Instanciación global directa de `app = FastAPI(...)` al importar el archivo. | Factoría `create_app() -> FastAPI` manteniendo `app = create_app()` al final del módulo. | Facilita tests aislados sin efectos colaterales al importar y ordena el ciclo de ensamblaje sin romper `uvicorn app.main:app`. |
-| **Ciclo de Vida (`lifespan`) y Datos Fijos** | `lifespan` ejecuta `ensure_reference_data_on_startup()` para categorías base y alérgenos UE. | **Preservado íntegramente**: `create_app()` inyecta `lifespan=lifespan` en la instancia `FastAPI`. | Garantiza que las 5 categorías y 14 alérgenos oficiales estén siempre presentes al iniciar el servidor o los tests. |
-| **Contrato de Respuesta de Error** | Mixto: `{"detail": "..."}` en `HTTPException`, pero lista técnica en inglés `[{"loc", "msg", "type", "input"}]` en errores `422`. | Contrato único y estricto `ErrorResponse`: `{"detail": "Mensaje en español"}` para **todos** los errores `4xx` y `5xx`. | Los desarrolladores frontend y consumidores de la API procesan siempre una única estructura JSON predecible. |
-| **Validaciones Pydantic v2 (`422`)** | Mensajes en inglés por defecto de Pydantic; expone rutas internas (`body -> usuario -> ...`) y el valor `input`. | `translate_validation_errors()` traduce más de 50 códigos de Pydantic v2 al español y extrae solo el campo hoja (`extract_field_name`). | Mensajes legibles para el usuario final (`"Error en el campo 'nombre': El campo es obligatorio"`) y cumplimiento de seguridad OWASP. |
-| **Excepciones de Dominio vs. HTTP** | Las rutas y servicios dependen directamente de `fastapi.HTTPException`. | Jerarquía `AppError` (`NotFoundError`, `ConflictError`, `PermissionDeniedError`, `DomainValidationError`, `DatabaseRetryableError`, `InfrastructureError`) + soporte total a `HTTPException`. | Desacopla la capa de negocio (`services/`) del framework web sin obligar a reescribir las rutas que ya usan `HTTPException`. |
-| **Errores de Base de Datos (PostgreSQL / SQLAlchemy)** | Sin traducción global. Si falla una restricción SQL no verificada antes, se produce un error 500 o la sesión queda bloqueada. | `translate_sqlalchemy_error()` mapea códigos `SQLSTATE` (`23505`, `23503`, `23502`, `23514`, `40001`, `40P01`) y `handle_db_exceptions` ejecuta `session.rollback()`. | Convierte violaciones de unicidad o claves foráneas en respuestas `409`/`422` en español y evita `PendingRollbackError`. |
-| **Manejo de Errores Inesperados (`500`)** | Manejador por defecto de Starlette. | `unhandled_exception_handler` captura cualquier `Exception` no controlada, registra el detalle internamente y devuelve `{"detail": "Error interno del servidor"}`. | Impide la filtración accidental de tracebacks de Python, consultas SQL o credenciales al cliente HTTP. |
-| **Trazabilidad (`X-Request-ID`)** | Inexistente. | `CorrelationIdMiddleware` (Pure ASGI) propaga o genera `X-Request-ID` en cada petición/respuesta y lo vincula con `ContextVar`. | Permite rastrear cualquier fallo reportado por un cliente buscando su `X-Request-ID` en los logs del servidor. |
-| **Logging y Seguridad de Datos** | Sin formato estructurado ni filtro de secretos. | `StructuredJsonFormatter` + `redact_sensitive_data()` que reemplaza passwords, tokens y DSNs por `[REDACTED]`. | Logs listos para indexación y protegidos contra fugas de credenciales en consola o sistemas de monitorización. |
-| **Documentación OpenAPI 3.1 (`/docs`)** | Muestra `HTTPValidationError` por defecto en rutas con parámetros o body. | `configure_openapi()` elimina `HTTPValidationError` y asigna `#/components/schemas/ErrorResponse` a todas las respuestas `422` + `COMMON_ERROR_RESPONSES`. | El contrato documentado en Swagger UI coincide al 100% con el JSON real que devuelve la API. |
+| **Inicialización de la App (`app/main.py`)** | Instanciación global directa de `app = FastAPI(...)` al importar el archivo. | Factoría `create_app() -> FastAPI` manteniendo `app = create_app()` al final del módulo. | Permite crear instancias adicionales aisladas en tests sin mutar la app global y mantiene `uvicorn app.main:app --reload`. *Compromiso:* al conservar `app = create_app()` en el módulo, importar `app.main` sigue instanciando el objeto global `app`. |
+| **Ciclo de Vida (`lifespan`) y Datos Fijos** | `lifespan` ejecuta `ensure_reference_data_on_startup()` para categorías base y alérgenos UE. | **Preservado íntegramente**: `create_app()` inyecta `lifespan=lifespan` en la instancia `FastAPI`. | Garantiza que las 5 categorías y 14 alérgenos oficiales estén presentes al iniciar el servidor o el contexto `with TestClient(app)`. |
+| **Contrato de Respuesta de Error** | Mixto: `{"detail": "..."}` en `HTTPException`, pero lista técnica en inglés `[{"loc", "msg", "type", "input"}]` en errores `422`. | Contrato único y estricto `ErrorResponse`: `{"detail": "Mensaje en español"}` para **todos** los errores `4xx` y `5xx`. | Formato JSON único y predecible. *Cambio de contrato:* los clientes que esperaban la lista de errores por defecto de FastAPI en códigos `422` reciben ahora un string en `detail`. |
+| **Validaciones Pydantic v2 (`422`)** | Mensajes en inglés por defecto de Pydantic; expone rutas internas (`body -> usuario -> ...`) y el valor `input`. | `translate_validation_errors()` traduce más de 50 códigos de Pydantic v2 al español y extrae solo el campo hoja (`extract_field_name`). | Mensajes claros en español (`"Error en el campo 'nombre': El campo es obligatorio"`) sin exponer la estructura interna de esquemas ni el campo `input`. |
+| **Excepciones de Dominio vs. HTTP** | Las rutas y servicios dependen directamente de `fastapi.HTTPException`. | Jerarquía `AppError` (`NotFoundError`, `ConflictError`, `PermissionDeniedError`, `DomainValidationError`, `DatabaseRetryableError`, `InfrastructureError`) + `http_exception_handler`. | Desacopla `services/` de FastAPI. Las `HTTPException` en español se conservan tal cual, mientras que los detalles por defecto en inglés (`"Not Found"`, `"Unauthorized"`) se traducen al español. |
+| **Errores de Base de Datos (PostgreSQL / SQLAlchemy)** | Sin traducción global ni gestor de rollback unificado. | `translate_sqlalchemy_error()` mapea códigos `SQLSTATE` (`23505`, `23503`, `23502`, `23514`, `40001`, `40P01`). `handle_db_exceptions(session)` ejecuta `session.rollback()`. | `sqlalchemy_exception_handler` evita fugas SQL globalmente; `handle_db_exceptions(session)` garantiza además el `session.rollback()` inmediato para evitar `PendingRollbackError` al reutilizar la sesión. |
+| **Manejo de Errores Inesperados (`500`)** | Manejador por defecto de Starlette. | `unhandled_exception_handler` captura cualquier `Exception` no controlada, registra el tipo de error internamente y devuelve `{"detail": "Error interno del servidor"}`. | Impide la filtración de tracebacks de Python, consultas SQL o credenciales al cliente HTTP. |
+| **Trazabilidad (`X-Request-ID`)** | Inexistente. | `CorrelationIdMiddleware` (Pure ASGI) propaga o genera `X-Request-ID` en cada petición/respuesta y lo vincula con `ContextVar`. | Permite correlacionar cualquier respuesta HTTP con los eventos registrados por el logger `"sgr"`. |
+| **Logging y Redacción de Secretos** | Sin formato estructurado ni filtro de secretos; `echo=True` en SQLAlchemy engine. | `StructuredJsonFormatter` en el logger `"sgr"` + `redact_sensitive_data()` para claves sensibles, tokens `Bearer` y URIs DSN (`[REDACTED]`). | Protege los campos estructurados y URIs DSN en el logger `"sgr"`. *Limitación:* es heurístico (claves/regex) y no aplica automáticamente a otros loggers como `sqlalchemy.engine`. |
+| **Documentación OpenAPI 3.1 (`/docs`)** | Muestra `HTTPValidationError` por defecto en rutas con parámetros o body. | `configure_openapi()` elimina `HTTPValidationError` y asigna `#/components/schemas/ErrorResponse` a todas las respuestas `422` + `COMMON_ERROR_RESPONSES`. | El esquema documentado en Swagger UI refleja el contrato `ErrorResponse` real devuelto por la API. |
 
 ---
 
 ## 5. Explicación Detallada de `app/main.py`
 
-Varios compañeros del equipo han expresado dudas comprensibles sobre por qué `app/main.py` pasa de ~50 líneas a ~145 líneas y por qué se estructura mediante funciones como `create_app()` y `configure_openapi()`. Esta sección explica de manera transparente qué hacía antes `app/main.py`, qué hace ahora y por qué cada bloque tiene una razón técnica concreta.
+Varios compañeros del equipo han expresado dudas comprensibles sobre por qué `app/main.py` pasa de 50 líneas a 141 líneas y por qué se estructura mediante funciones como `create_app()` y `configure_openapi()`. Esta sección explica de manera transparente qué hacía antes `app/main.py`, qué hace ahora y por qué cada bloque tiene una razón técnica concreta.
 
 ### 5.1. ¿Qué responsabilidades tenía `app/main.py` anteriormente en `dev`?
 
@@ -289,52 +302,54 @@ En `origin/dev`, `app/main.py` cumplía 5 tareas básicas de forma secuencial:
 
 Tras integrar `feat/errors-handler`, `app/main.py` actúa como el **Punto de Composición Arquitectónica (*Composition Root*)** de la aplicación. No contiene lógica de negocio ni lógica de traducción de errores (que viven en `app/core/`), sino que conecta las piezas transversales en tres bloques bien delimitados:
 
-1. **Gestión del ciclo de vida (`lifespan`, líneas 31–34):**
+1. **Gestión del ciclo de vida (`lifespan`, líneas 32–35):**
    Exactamente el mismo gestor de `dev` que invoca `reference_service.ensure_reference_data_on_startup()`.
-2. **Personalización del esquema OpenAPI (`configure_openapi`, líneas 37–84):**
-   FastAPI genera automáticamente en cada endpoint una respuesta `422 Unprocessable Entity` vinculada al esquema interno `HTTPValidationError`. Como nuestro manejador global reemplaza esa respuesta por `{"detail": "..."}` (`ErrorResponse`), si no actualizamos el diccionario OpenAPI, Swagger UI engañaría al desarrollador mostrando un esquema que ya no existe. `configure_openapi()` recorre las rutas generadas y sustituye la referencia del código `422` por `#/components/schemas/ErrorResponse`.
-3. **Factoría de la aplicación (`create_app`, líneas 87–142) e instancia global (`app = create_app()`, línea 145):**
+2. **Personalización del esquema OpenAPI (`configure_openapi`, líneas 38–86):**
+   FastAPI genera automáticamente en cada endpoint una respuesta `422 Unprocessable Entity` vinculada al esquema interno `HTTPValidationError`. Como nuestro manejador global reemplaza esa respuesta por `{"detail": "..."}` (`ErrorResponse`), si no actualizamos el diccionario OpenAPI, Swagger UI mostraría un esquema que ya no coincide con la respuesta real. `configure_openapi()` recorre las rutas generadas y sustituye la referencia del código `422` por `#/components/schemas/ErrorResponse`.
+3. **Factoría de la aplicación (`create_app`, líneas 89–138) e instancia global (`app = create_app()`, línea 141):**
    Agrupa la configuración de logging, la creación de `FastAPI` (con `lifespan` y `COMMON_ERROR_RESPONSES`), el registro de `CorrelationIdMiddleware`, el registro de los 5 manejadores globales (`register_exception_handlers`), el montaje de `STATIC_DIR` y el registro de todos los routers y endpoints de salud/favicon.
 
-### 5.3. ¿Por qué introducimos una factoría `create_app()`?
+### 5.3. ¿Por qué introducimos una factoría `create_app()` y qué ocurre al importar `app.main`?
 
-Cuando una aplicación FastAPI se instancia directamente en el cuerpo del archivo (`app = FastAPI()`), cualquier archivo de test que haga `from app.main import ...` ejecuta inmediatamente todo el código global.Con `create_app()`:
-- Los tests pueden llamar a `create_app()` para obtener una instancia fresca y aislada en cada prueba sin contaminar otros tests.
-- Al dejar `app = create_app()` en la última línea, **ningún miembro del equipo tiene que cambiar su forma de trabajar**: `uvicorn app.main:app --reload` sigue encontrando el objeto `app` exactamente donde lo espera.
+Es importante explicar con precisión cómo funciona `app/main.py` cuando se importa:
+- Como en la línea 141 se mantiene `app = create_app()` en el nivel superior del módulo, **importar `app.main` sigue ejecutando `create_app()` una vez en tiempo de importación** y creando la instancia global `app` (configurando el logger `"sgr"`, asegurando que exista el directorio `static/uploads` y registrando middlewares, manejadores y routers). La inicialización de base de datos (`ensure_reference_data_on_startup()`) no se ejecuta al importar el módulo, sino únicamente cuando arranca el contexto `lifespan`.
+- ¿Por qué mantener entonces tanto `create_app()` como `app = create_app()`?
+  1. **Aislamiento en pruebas bajo demanda:** Los tests que necesitan verificar configuraciones de OpenAPI, middlewares o rutas de prueba pueden invocar `create_app()` para obtener una instancia nueva e independiente de `FastAPI` en cada test, sin modificar ni contaminar la instancia global `app` compartida por el resto de la suite.
+  2. **Continuidad operativa para el equipo:** Al mantener `app = create_app()` en la última línea, **ningún miembro del equipo tiene que cambiar sus comandos ni scripts de ejecución**: `uvicorn app.main:app --reload` sigue encontrando el objeto `app` exactamente en `app.main:app`.
 
 ### 5.4. ¿Por qué se configuran centralmente el middleware y los manejadores de excepciones?
 
-Si cada desarrollador tuviera que capturar `SQLAlchemyError`, traducir errores de Pydantic o generar cabeceras `X-Request-ID` dentro de cada archivo de rutas (`dish_routes.py`, `category_routes.py`, `table_routes.py`, etc.), tendríamos código repetido en decenas de endpoints y cualquier olvido provocaría fugas de errores `500` o formatos dispares. Al registrarlo una sola vez en `create_app()` mediante `application.add_middleware(CorrelationIdMiddleware)` y `register_exception_handlers(application)`, **todos los routers presentes y futuros quedan protegidos automáticamente**.
+Si cada desarrollador tuviera que capturar `SQLAlchemyError`, traducir errores de Pydantic o generar cabeceras `X-Request-ID` dentro de cada archivo de rutas (`dish_routes.py`, `category_routes.py`, `table_routes.py`, etc.), tendríamos código repetido en decenas de endpoints y cualquier olvido provocaría fugas de errores `500` o formatos dispares. Al registrarlo una sola vez en `create_app()` mediante `application.add_middleware(CorrelationIdMiddleware)` y `register_exception_handlers(application)`, **todos los routers presentes y futuros quedan cubiertos automáticamente**.
 
 ### 5.5. Separación de responsabilidades vs. Complejidad innecesaria
 
 Es fundamental distinguir entre **complejidad accidental** (hacer las cosas difíciles sin motivo) y **estructuración arquitectónica**:
-- En `app/main.py` **no** hemos metido diccionarios de traducción ni expresiones regulares ni lógica de base de datos; todo eso se delegó a módulos cohesivos (`app/core/exceptions.py`, `app/core/error_translations.py`, `app/core/handlers.py`, `app/core/logging_config.py`, `app/schemas/errors.py`).
-- El aumento de líneas en `app/main.py` se debe únicamente a dos cosas: la función `configure_openapi()` (~45 líneas) necesaria para que Swagger UI muestre `ErrorResponse` en los errores `422`, y la envoltura limpia de `create_app()`.
+- En `app/main.py` **no** hemos introducido diccionarios de traducción ni expresiones regulares ni lógica de base de datos; todo eso se delegó a módulos cohesivos (`app/core/exceptions.py`, `app/core/error_translations.py`, `app/core/handlers.py`, `app/core/logging_config.py`, `app/schemas/errors.py`).
+- El aumento de líneas en `app/main.py` se debe únicamente a dos cosas: la función `configure_openapi()` (~49 líneas) necesaria para que Swagger UI muestre `ErrorResponse` en los errores `422`, y la función `create_app()`.
 
 ---
 
 ## 6. Inventario Detallado de Cambios en Otros Archivos
 
-A continuación se documentan todos los archivos creados o modificados en la integración de `feat/errors-handler` con `origin/dev`, indicando su estado previo, el cambio introducido, su justificación y su impacto de compatibilidad.
+A continuación se documentan todos los archivos creados o modificados en la integración de `feat/errors-handler` con `origin/dev`, indicando su estado previo, el cambio introducido, su justificación y su impacto real en la compatibilidad.
 
 ### 6.1. Tabla Resumen de Archivos Afectados
 
 | Archivo | Estado respecto a `origin/dev` | Propósito Principal | Impacto en Compatibilidad |
 | :--- | :--- | :--- | :--- |
-| `app/main.py` | **Modificado (Fusionado)** | Integra `create_app()`, `configure_openapi()`, `CorrelationIdMiddleware` y `register_exception_handlers()` con el `lifespan`, `STATIC_DIR` y `/favicon.ico` de `dev`. | 100% compatible con `uvicorn app.main:app --reload` y con todas las rutas de `dev`. |
-| `app/core/exceptions.py` | **Nuevo** | Define `AppError` y las 6 subclases de dominio agnósticas al transporte HTTP (`403`, `404`, `409`, `422`, `500`, `503`). | Ningún conflicto; puede importarse desde cualquier servicio. |
-| `app/core/error_translations.py` | **Nuevo** | Traduce errores de Pydantic v2 y códigos `SQLSTATE` de PostgreSQL al español; provee `handle_db_exceptions` y `handle_async_db_exceptions` con `rollback()`. | Compatible con sesiones síncronas (`Session`) de `dev` y futuras sesiones asíncronas. |
-| `app/core/handlers.py` | **Nuevo** | Implementa los 5 manejadores globales (`AppError`, `RequestValidationError`, `StarletteHTTPException`, `SQLAlchemyError`, `Exception`). | Mantiene el comportamiento de `HTTPException` en español y traduce mensajes por defecto en inglés (`Not Found`, `Unauthorized`). |
-| `app/core/logging_config.py` | **Nuevo** | Configura logging JSON (`StructuredJsonFormatter`), redacción de secretos (`redact_sensitive_data`) y `CorrelationIdMiddleware`. | Transparente para las rutas; añade `X-Request-ID` a todas las respuestas. |
-| `app/schemas/errors.py` | **Nuevo** | Define el esquema Pydantic `ErrorResponse(detail: str)` con `extra="forbid"` y el catálogo `COMMON_ERROR_RESPONSES`. | Estandariza la documentación OpenAPI 3.1. |
+| `app/main.py` | **Modificado (Fusionado)** | Integra `create_app()`, `configure_openapi()`, `CorrelationIdMiddleware` y `register_exception_handlers()` con el `lifespan`, `STATIC_DIR` y `/favicon.ico` de `dev`. | Mantiene `uvicorn app.main:app --reload` y todas las rutas de `dev`. Cambia el formato de error `422` a `ErrorResponse` y devuelve `204` en `/favicon.ico` si no existe el archivo físico. |
+| `app/core/exceptions.py` | **Nuevo** | Define `AppError` y las 6 subclases de dominio agnósticas al transporte HTTP (`403`, `404`, `409`, `422`, `500`, `503`). | Ningún conflicto; puede importarse desde cualquier servicio sin depender de FastAPI. |
+| `app/core/error_translations.py` | **Nuevo** | Traduce errores de Pydantic v2 y códigos `SQLSTATE` de PostgreSQL al español; provee `handle_db_exceptions(session)` y `handle_async_db_exceptions(session)` con `session.rollback()`. | Compatible con sesiones síncronas (`Session`) de `dev` y sesiones asíncronas (`AsyncSession`). El rollback automático requiere usar el gestor de contexto con la sesión activa. |
+| `app/core/handlers.py` | **Nuevo** | Implementa los 5 manejadores globales (`AppError`, `RequestValidationError`, `StarletteHTTPException`, `SQLAlchemyError`, `Exception`). | Conserva los `detail` en español de `HTTPException`, traduce detalles por defecto en inglés (`"Not Found"`, `"Unauthorized"`), y unifica toda respuesta `4xx`/`5xx` en `{"detail": "..."}`. |
+| `app/core/logging_config.py` | **Nuevo** | Configura logging JSON (`StructuredJsonFormatter`) en el logger `"sgr"`, redacción heurística (`redact_sensitive_data`) y `CorrelationIdMiddleware`. | Transparente para las rutas; añade `X-Request-ID` a todas las respuestas HTTP. Solo formatea en JSON los eventos emitidos a través del logger `"sgr"`. |
+| `app/schemas/errors.py` | **Nuevo** | Define el esquema Pydantic `ErrorResponse(detail: str)` con `extra="forbid"` y el catálogo `COMMON_ERROR_RESPONSES`. | Estandariza la documentación OpenAPI 3.1 y reemplaza `HTTPValidationError` en las respuestas `422`. |
 | `app/core/config.py` | **Modificado** | Actualiza `SettingsConfigDict(env_file=".env", extra="ignore")` y tipado de `database_url`. | Evita que la app falle al arrancar si el archivo `.env` local contiene variables adicionales (ej. `DEBUG`, `SECRET_KEY`, `JIRA_*`). |
 | `app/api/routes.py` | **Nuevo** | Router `/errores-demo` con endpoints para verificar y demostrar en Swagger UI todos los códigos de error de dominio y validación anidada. | Prefijo aislado `/errores-demo`; no colisiona con `/dishes`, `/categories`, `/allergens` ni `/test`. |
 | `scripts/init_db.py` | **Nuevo** | Script utilitario seguro que conecta a la BD `postgres` en modo `AUTOCOMMIT` y crea `sgr_db` si no existe. | Facilita la puesta en marcha local antes de ejecutar `alembic upgrade head`. |
 | `tests/test_exception_handlers.py` | **Nuevo** | 11 pruebas unitarias y de contrato para excepciones de dominio, Pydantic 422, OpenAPI, rollback en SQLite en memoria y redacción de datos sensibles. | Sin dependencias externas; ejecuta en < 0.5 s. |
 | `tests/test_db_exceptions.py` | **Nuevo (Adaptado a `dev`)** | 4 pruebas de integración real contra PostgreSQL (`23505`, `23503`, recuperación tras rollback y test integral de `create_app()` + `lifespan` + rutas `dev`). | Actualizado para importar `CategoryModel` y `DishModel` desde `app.models` sin la columna eliminada `dishes.allergens`. |
 | `pytest.ini` | **Nuevo** | Fija `testpaths = tests` y `python_files = test_*.py`. | Evita que `pytest` escanee por error `app/models/test_model.py` (que causaba `InvalidRequestError` en SQLAlchemy al reimportarse). |
-| `.env.example` / `.gitignore` / `README.md` | **Nuevos / Modificados** | Plantilla `.env.example`, reglas de `.gitignore` y sección documental de `SGR-49` integrada con la guía de Alembic y `seed_data` de `dev`. | Mejora la experiencia de desarrollo (DX) y onboarding del equipo. |
+| `.env.example` / `.gitignore` / `README.md` | **Nuevos / Modificados** | Plantilla `.env.example`, reglas de `.gitignore` y sección documental de `SGR-49` integrada con la guía de Alembic y `seed_data` de `dev`. | Mejora la experiencia de desarrollo (DX) y documentación del equipo. |
 
 ### 6.2. Detalle de Adaptación Crítica en `tests/test_db_exceptions.py`
 
@@ -348,19 +363,19 @@ Al auditar la interacción entre `feat/errors-handler` y los cambios recientes d
 
 ## 7. Análisis y Auditoría de Ramas Git
 
-Se realizó una auditoría forense completa del repositorio Git local y remoto (`origin/dev`, `origin/main`, `feat/errors-handler` y Pull Requests #1 a #10).
+Se realizó una auditoría completa del repositorio Git local y remoto (`origin/dev`, `origin/main`, `feat/errors-handler` y Pull Requests #1 a #10).
 
 ### 7.1. Topología de Ramas y Ancestro Común (`merge-base`)
 
 El ancestro común (`git merge-base`) entre las tres ramas antes de nuestra integración era el commit **`abe6b6f2a3d7db66803c6b9b2b07b35fe9360c95`** (*Merge pull request #7 from mxu-init/feat/SGR-70-allergen-model*):
 
 ```
-                      +-- 266af6a (fix: CRUD table) -- daeb2d2 (first commit) [origin/main]
-                     /    [También abierto como PR #10: feature/sgr-23-tables-crud -> dev]
-                    /
---- abe6b6f (Base) +----- b9870ec .. f0126c5 -- daac6dd (Merge PR #9: refactor/code-refinement) [origin/dev]
-                    \                                                              \
-                     +--- b6643ef .. 069b0c4 (SGR-49 Error Handling) ---------------+--> [feat/errors-handler Integrada]
+                    +-- 266af6a (fix: CRUD table) -- daeb2d2 (first commit) [origin/main]
+                   /    [También en PR #10: feature/sgr-23-tables-crud -> dev]
+                  /
+--- abe6b6f (Base) +--- b9870ec..f0126c5 -- daac6dd (Merge PR #9) [origin/dev]
+                  \                                                \
+                   +--- b6643ef..069b0c4 (SGR-49) ------------------+--> [feat/errors-handler]
 ```
 
 ### 7.2. ¿Qué hay en `origin/dev` (`abe6b6f..daac6dd`)?
@@ -381,10 +396,10 @@ Al ejecutar `git log origin/dev..origin/main`, encontramos exactamente **2 commi
 
 | Commit SHA | Autor y Fecha | Mensaje | Archivos Modificados | Análisis de Relevancia y Decisión Arquitectónica |
 | :--- | :--- | :--- | :--- | :--- |
-| **`266af6a`** | `moigarcia00` (07/11/2026) | `fix: CRUD table` | `alembic/env.py`, 2 migraciones (`8c938a804c11`, `71ad42bf89a7`), `app/api/table_routes.py`, `app/main.py`, `app/models/table_model.py`, `app/schemas/table_schema.py`, `app/services/table_service.py` | **NO incorporar en `feat/errors-handler`.** Este commit implementa el CRUD de mesas (`SGR-23`), que fue subido a `main` pero tiene su propio Pull Request abierto hacia `dev` (**PR #10**: `feature/sgr-23-tables-crud` → `dev`, mismo SHA `266af6a`). Además, su migración `8c938a804c11` parte de `76ea12b38f94`, lo que crearía dos cabezas (*multiple heads*) en Alembic respecto a `aacc49216385` de `dev`. Debe revisarse y fusionarse en su propio PR #10. Nota: Nuestro `CONSTRAINT_SPANISH_MESSAGES` en `error_translations.py` ya incluye soporte preventivo para `"uq_tables_number": "Ya existe una mesa con ese número"`. |
-| **`daeb2d2`** | `moigarcia00` (10/11/2026) | `first commit` | `README.md` (+1 línea: `# MYWARFRAME` al final del archivo) | **Irrelevante / Ruido de prueba.** Fue un commit de prueba accidental en `main` que añade una línea sin relación con el proyecto al final del `README.md`. **No debe incorporarse.** |
+| **`266af6a`** | `moigarcia00` (07/11/2026) | `fix: CRUD table` | `alembic/env.py`, 2 migraciones (`8c938a804c11`, `71ad42bf89a7`), `app/api/table_routes.py`, `app/main.py`, `app/models/table_model.py`, `app/schemas/table_schema.py`, `app/services/table_service.py` | **NO incorporar en `feat/errors-handler`.** Este commit implementa el CRUD de mesas (`SGR-23`) y ya cuenta con su propio Pull Request independiente abierto hacia `dev` (**PR #10**: `feature/sgr-23-tables-crud` → `dev`, mismo SHA `266af6a`). **Advertencia de compatibilidad en Alembic:** su migración `8c938a804c11` tiene `down_revision = '76ea12b38f94'`, mientras que `origin/dev` avanzó desde `76ea12b38f94` hacia `c23d2bf3b75a` y `aacc49216385`; incorporar `266af6a` sin encadenar su revisión provocaría dos cabezas (*multiple heads*) en Alembic. Debe revisarse e integrarse en su propio PR #10. Nota: `CONSTRAINT_SPANISH_MESSAGES` en `error_translations.py` ya incluye soporte para `"uq_tables_number": "Ya existe una mesa con ese número"`. |
+| **`daeb2d2`** | `moigarcia00` (10/11/2026) | `first commit` | `README.md` (+1 línea: `# MYWARFRAME` al final del archivo) | **NO incorporar en `feat/errors-handler`.** Este commit modifica únicamente `README.md` añadiendo la línea `# MYWARFRAME` al final del documento. No guarda relación funcional ni arquitectónica con `SGR-49` ni con la rama `origin/dev`. |
 
-**Conclusión de la auditoría de `main`:** Ninguno de los dos commits exclusivos de `origin/main` pertenece al alcance de `feat/errors-handler` ni debe mezclarse en nuestra rama. Todos los cambios legítimos de la arquitectura actual residen en `origin/dev`.
+**Conclusión de la auditoría de `main`:** Ninguno de los dos commits exclusivos de `origin/main` pertenece al alcance de `feat/errors-handler` ni debe mezclarse en nuestra rama. Todos los cambios que conforman la línea base de integración actual residen en `origin/dev`.
 
 ---
 
@@ -414,7 +429,7 @@ Al ejecutar `git log origin/dev..origin/main`, encontramos exactamente **2 commi
                           |
                           +-- Caso A: Éxito (200 / 201 / 204)
                           |     --> Middleware inyecta 'X-Request-ID' en cabeceras
-                          |     --> Devuelve respuesta JSON al cliente
+                          |     --> Devuelve respuesta al cliente
                           |
                           +-- Caso B: Regla de negocio lanza AppError (NotFoundError, ConflictError...)
                           |     --> Capturado por app_error_handler()
@@ -424,19 +439,24 @@ Al ejecutar `git log origin/dev..origin/main`, encontramos exactamente **2 commi
                           |
                           +-- Caso C: Ruta existente lanza HTTPException / StarletteHTTPException
                           |     --> Capturado por http_exception_handler()
-                          |     --> Conserva mensaje en español o traduce mensaje por defecto inglés
+                          |     --> Conserva mensaje en español o traduce detalle inglés por defecto
                           |     --> Preserva cabeceras (ej. WWW-Authenticate) + X-Request-ID
                           |     --> Respuesta HTTP con {"detail": "<mensaje en español>"}
                           |
-                          +-- Caso D: Error SQL en PostgreSQL (con handle_db_exceptions o global)
-                          |     --> Ejecuta session.rollback() inmediatamente
+                          +-- Caso D1: Error SQL dentro de 'with handle_db_exceptions(session):'
+                          |     --> Ejecuta session.rollback() inmediatamente sobre la sesión activa
                           |     --> Extrae SQLSTATE (23505, 23503...) y constraint_name
-                          |     --> Traduce a ConflictError (409) o DomainValidationError (422)
-                          |     --> Nunca expone sentencias SQL ni nombres de tablas al cliente
+                          |     --> Lanza ConflictError (409) o DomainValidationError (422)
+                          |     --> Capturado por app_error_handler() sin exponer SQL
+                          |
+                          +-- Caso D2: Error SQL no capturado llega a sqlalchemy_exception_handler()
+                          |     --> Traduce SQLAlchemyError a AppError (409/422/503/500) sin exponer SQL
+                          |     --> Nota: No ejecuta session.rollback() directamente (sin acceso a Session;
+                          |         la sesión se cierra al salir del generador get_db())
                           |
                           +-- Caso E: Excepción inesperada (RuntimeError, KeyError, ZeroDivisionError...)
                                 --> Capturado por unhandled_exception_handler()
-                                --> Log ERROR JSON con traceback interno y DSNs redactados ([REDACTED])
+                                --> Log ERROR JSON con exception_type (sin exponer str(exc) ni DSN)
                                 --> Respuesta HTTP 500: {"detail": "Error interno del servidor"}
 ```
 
@@ -476,7 +496,7 @@ Al ejecutar `git log origin/dev..origin/main`, encontramos exactamente **2 commi
   }
   ```
 
-#### Ejemplo 4: Error inesperado de servidor (`500 Internal Server Error`) y Redacción en Logs
+#### Ejemplo 4: Error inesperado de servidor (`500 Internal Server Error`) y Protección en Logs
 - **Fallo simulado:** `RuntimeError("Database failure at postgresql+psycopg://admin:supersecret@db:5432/prod")`
 - **Cuerpo JSON devuelto al cliente:**
   ```json
@@ -484,7 +504,7 @@ Al ejecutar `git log origin/dev..origin/main`, encontramos exactamente **2 commi
     "detail": "Error interno del servidor"
   }
   ```
-- **Registro JSON emitido en los logs internos del servidor (con DSN y credenciales enmascaradas):**
+- **Registro JSON emitido por `unhandled_exception_handler` (omite `str(exc)` para no filtrar el mensaje bruto con el DSN, registrando solo `exception_type`, mientras que cualquier DSN o clave sensible presente en `message` o `context` es reemplazada por `[REDACTED]`):**
   ```json
   {
     "timestamp": "2026-11-10T09:42:00.123456+00:00",
@@ -539,7 +559,7 @@ Todas las pruebas fueron ejecutadas realmente contra el entorno virtual del proy
 | `tests/test_exception_handlers.py` | `test_async_session_rollback_and_sensitive_redaction` | Rollback asíncrono (`handle_async_db_exceptions`), preservación de `WWW-Authenticate` en `401`, propagación de `X-Request-ID` y redacción `[REDACTED]`. | **PASSED** |
 | `tests/test_db_exceptions.py` | `test_sqlstate_23505_unique_violation_translates_to_409_conflict` | Prueba real contra PostgreSQL: insertar categoría duplicada dispara `SQLSTATE 23505` → HTTP `409` sin fugas SQL. | **PASSED** |
 | `tests/test_db_exceptions.py` | `test_sqlstate_23503_foreign_key_violation_translates_to_409_without_sql_leak` | Prueba real contra PostgreSQL: insertar plato con `category_id` inexistente dispara `SQLSTATE 23503` → HTTP `409` sin fugas SQL. | **PASSED** |
-| `tests/test_db_exceptions.py` | `test_session_rollback_on_sync_and_async_handlers_prevents_pending_rollback_error` | Prueba real contra PostgreSQL: recuperación inmediata de la sesión tras violaciones `23505` y `23503`. | **PASSED** |
+| `tests/test_db_exceptions.py` | `test_session_rollback_on_sync_and_async_handlers_prevents_pending_rollback_error` | Prueba real contra PostgreSQL: recuperación inmediata de la sesión tras violaciones `23505` y `23503` usando `handle_db_exceptions`. | **PASSED** |
 | `tests/test_db_exceptions.py` | `test_create_app_lifespan_reference_data_and_dev_endpoints` | Prueba integral de `create_app()`: verifica ejecución de `lifespan`, carga de las 5 categorías y 14 alérgenos UE, `/health`, `/health/db`, `/favicon.ico` y error `404` en `/dishes/999999999` con `X-Request-ID`. | **PASSED** |
 
 ### 9.3. Hallazgos y Correcciones Aplicadas Durante la Validación
@@ -555,27 +575,30 @@ Todas las pruebas fueron ejecutadas realmente contra el entorno virtual del proy
 
 ## 10. Conclusiones y Recomendaciones para el Equipo
 
-### 10.1. Qué se ha mejorado y qué permanece intacto
+### 10.1. Qué permanece sin cambios, qué cambia en el contrato HTTP y qué se ha mejorado
 
-- **Permanece intacto (100% compatible con `dev`):**
-  - El comando de ejecución `uvicorn app.main:app --reload`.
+- **Permanece sin cambios respecto a `origin/dev`:**
+  - El comando de ejecución `uvicorn app.main:app --reload` (gracias a `app = create_app()` al final de `app/main.py`).
   - El ciclo de vida `lifespan` y la carga automática en el arranque de las 5 categorías fijas y los 14 alérgenos oficiales (`reference_service.ensure_reference_data_on_startup()`).
   - La estructura modular de modelos en `app/models/` y la relación N:M entre platos y alérgenos (`dish_allergens`).
-  - Todos los endpoints existentes en `dish_routes.py`, `category_routes.py`, `allergen_routes.py` y `test_routes.py`.
-- **Se ha mejorado:**
-  - Todas las respuestas de error (`400`, `401`, `403`, `404`, `409`, `422`, `500`, `503`) cumplen ahora un contrato único en español: `{"detail": "..."}`.
-  - Los errores de validación de Pydantic (`422`) ya no devuelven estructuras técnicas en inglés ni exponen el campo `input`.
-  - Los fallos de integridad de PostgreSQL se traducen de forma segura y hacen `rollback()` automático de la sesión.
-  - Todas las respuestas HTTP incluyen `X-Request-ID` y los logs JSON enmascaran cualquier credencial o DSN sensible.
+  - Todas las rutas, métodos HTTP y respuestas exitosas (`2xx`) existentes en `dish_routes.py`, `category_routes.py`, `allergen_routes.py` y `test_routes.py`, así como los mensajes en español lanzados mediante `HTTPException`.
+- **Cambios intencionales de comportamiento y contrato (a tener en cuenta por clientes API y tests):**
+  - **Nuevo contrato para errores `422`:** Las fallas de validación de entrada (`RequestValidationError`) ya no devuelven el array por defecto de FastAPI/Pydantic (`{"detail": [{"loc", "msg", "type", "input"}]}`), sino un objeto `ErrorResponse` con una cadena en español (`{"detail": "Error en el campo '<campo>': <motivo>"}`), y el esquema OpenAPI reemplaza `HTTPValidationError` por `ErrorResponse`.
+  - **Normalización de `HTTPException`:** Si algún componente o dependencia de Starlette/FastAPI lanza una `HTTPException` con un mensaje por defecto en inglés (ej. `"Not Found"`, `"Unauthorized"`, `"Method Not Allowed"`) o con un `detail` no textual, `http_exception_handler` lo traduce o normaliza a una cadena en español dentro de `{"detail": "..."}`.
+  - **Respuesta `204 No Content` en `/favicon.ico`:** Cuando `static/favicon.ico` no existe en el sistema de archivos, `/favicon.ico` y `/docs/favicon.ico` devuelven `204 No Content` en lugar de fallar con `RuntimeError`.
+- **Mejoras de fiabilidad y observabilidad:**
+  - Separación entre la traducción global de `SQLAlchemyError` (`sqlalchemy_exception_handler`, que protege contra fugas SQL en cualquier ruta) y el rollback explícito de sesión mediante `handle_db_exceptions(session)` / `handle_async_db_exceptions(session)`.
+  - Trazabilidad completa mediante la cabecera `X-Request-ID` en todas las respuestas y logs JSON estructurados en el logger `"sgr"` con redacción heurística de claves sensibles, tokens `Bearer` y URIs DSN.
 
 ### 10.2. Guía para la Revisión del Pull Request (Code Review)
 
 Al revisar el PR hacia `dev`, recomendamos a los compañeros centrarse en:
 1. **`app/main.py`:** Verificar cómo `create_app()` integra limpiamente `lifespan=lifespan` y `STATIC_DIR` de `dev` junto con `CorrelationIdMiddleware`, `register_exception_handlers()` y `configure_openapi()`.
-2. **`app/core/handlers.py` y `app/core/error_translations.py`:** Revisar el catálogo de mensajes en español y cómo conviven sin fricción tanto las `HTTPException` actuales como las nuevas subclases de `AppError`.
+2. **`app/core/handlers.py` y `app/core/error_translations.py`:** Revisar el catálogo de mensajes en español, la diferencia entre el manejador global `sqlalchemy_exception_handler` y el gestor `handle_db_exceptions(session)`, y la convivencia entre `HTTPException` y `AppError`.
 3. **`tests/test_exception_handlers.py` y `tests/test_db_exceptions.py`:** Ejecutar `pytest -v` localmente para comprobar los 15 tests unitarios y de integración con PostgreSQL.
 
 ### 10.3. Recomendaciones Futuras (Evolución Progresiva)
 
-1. **Adopción gradual de `AppError` y `handle_db_exceptions` en nuevos servicios:** No es necesario reescribir de golpe `dish_routes.py` o `category_routes.py` (ya que `http_exception_handler` garantiza que sus `HTTPException` actuales funcionen perfectamente). Sin embargo, para futuros módulos (como reservas, menús dinámicos o autenticación JWT) o al integrar el PR #10 (`table_routes.py`), se recomienda utilizar `with handle_db_exceptions(db):` y lanzar `NotFoundError` / `ConflictError` desde la capa de servicios.
-2. **Condicionar `/errores-demo` al entorno de desarrollo:** Cuando se incorpore el módulo de seguridad y entornos de producción, el router de demostración `app/api/routes.py` (`/errores-demo`) puede incluirse únicamente cuando `settings.DEBUG` sea `True`.
+1. **Adopción gradual de `AppError` y `handle_db_exceptions(db)` en servicios:** No es necesario reescribir de inmediato `dish_routes.py` o `category_routes.py`. Sin embargo, para que los servicios gocen de `session.rollback()` inmediato ante fallos de integridad sin depender únicamente del cierre de sesión al final de la petición, se recomienda envolver las escrituras SQL en `with handle_db_exceptions(db):` y lanzar `NotFoundError` / `ConflictError` desde la capa de servicios.
+2. **Alineación de migraciones Alembic al integrar el PR #10 (`feature/sgr-23-tables-crud`):** Antes de fusionar el PR #10 en `dev`, actualizar el `down_revision` de la migración `8c938a804c11_create_tables.py` de `'76ea12b38f94'` a `'aacc49216385'` para mantener un único head lineal en Alembic.
+3. **Unificación de loggers adicionales y ocultación de `/errores-demo` en producción:** En futuras iteraciones, desactivar `echo=True` en `database_connection.py` fuera de entornos de depuración, redirigir los loggers de módulos al formateador estructurado si se requiere indexación centralizada completa, e incluir el router `/errores-demo` únicamente cuando `settings.DEBUG` sea `True`.
