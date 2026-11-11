@@ -5,6 +5,7 @@ anyio==4.15.1
 click==8.5.0
 fastapi==0.162.0
 h11==0.16.0
+httpx==0.28.1
 idna==3.20
 Mako==1.4.3
 MarkupSafe==3.0.4
@@ -14,6 +15,8 @@ psycopg-binary==3.3.6
 pydantic==2.14.1
 pydantic-settings==2.16.1
 pydantic_core==2.50.1
+pytest==9.2.0
+pytest-bdd==9.0.1
 python-dotenv==1.2.4
 python-multipart==0.0.32
 SQLAlchemy==2.1.6
