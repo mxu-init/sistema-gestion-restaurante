@@ -12,7 +12,7 @@ class Settings (BaseSettings):
     DB_PASSWORD:str
     DRIVER_NAME:str
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
     def database_url(self) -> str:

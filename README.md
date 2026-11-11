@@ -231,6 +231,20 @@ Una vez iniciado el servidor, accede a la documentación interactiva autogenerad
 
 ---
 
+## ⚠️ Manejo Centralizado de Errores (SGR-49)
+
+La aplicación unifica todas las respuestas de error HTTP en español bajo un único formato JSON definido por `ErrorResponse` (`{"detail": "..."}`):
+
+- **Ubicación de la implementación:** [`app/core/exceptions.py`](app/core/exceptions.py) (excepciones de dominio y manejadores globales), [`app/schemas/errors.py`](app/schemas/errors.py) (esquema `ErrorResponse` y catálogo Swagger) y [`app/main.py`](app/main.py).
+- **Respuestas HTTP soportadas:** `401` (no autenticado, preservando `WWW-Authenticate`), `403` (`PermissionDeniedError`), `404` (`NotFoundError`), `409` (`ConflictError`), `422` (`RequestValidationError` indicando el campo erróneo en español) y `500` (respuesta genérica `"Error interno del servidor"` sin exponer detalles internos).
+- **Ejecución de pruebas:**
+  ```bash
+  pytest -v
+  ```
+- **Documentación detallada:** [`docs/SGR-49/README.md`](docs/SGR-49/README.md)
+
+---
+
 ## 🛡️ Flujo de Contribución y Guía de Commits
 
 Para preservar un historial de Git limpio y profesional, el repositorio implementa un hook de [pre-commit](https://pre-commit.com/) que valida el estándar **Conventional Commits**:
