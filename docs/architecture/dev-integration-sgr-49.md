@@ -27,35 +27,29 @@ Not changed: `menu_service` still commits directly and does not use `handle_db_e
 
 `create_app()` builds one FastAPI app. It keeps startup reference-data seeding, static files, health routes, and the existing dish, category, allergen, test, and `/errores-demo` routers. It also includes the menu router. Exception handling stays in `register_exception_handlers()`: domain errors, HTTP exceptions, validation errors, SQLAlchemy errors, and unexpected exceptions. Menu `NotFoundError` and `ConflictError` values are handled there, not by a second pair of handlers on `app/main.py`.
 
-## 5. Gherkin tests
+## 5. Gherkin / BDD Test Separation
 
-Gherkin coverage was not in the branch. It is an instructor requirement for SGR-49, so `pytest-bdd==9.0.1` was added and six scenarios were written under `tests/features/sgr_49/`. Pytest loads them from `tests/test_sgr_49_bdd.py` through `pytest_bdd.scenarios`. Step definitions live in `tests/step_defs/sgr_49_steps.py` and are registered with `pytest_plugins` in `tests/conftest.py`.
+### Gherkin / BDD Test Separation
 
-The scenarios cover:
+Gherkin tests are maintained on the dedicated local branch `test/gherkin-bdd` (`b29ba7ea69bf85efebc414b7f945a687839eb3c5`). That branch was taken from `feat/errors-handler` before the suite was removed, so it still contains the SGR-49 implementation the scenarios depend on.
 
-1. `NotFoundError` on `GET /errores-demo/no-encontrado/41` returns HTTP 404 and the Spanish `detail`.
-2. `POST /errores-demo/validacion` without `nombre` returns HTTP 422 and `Error en el campo 'nombre': El campo es obligatorio`.
-3. An incoming `X-Request-ID` is returned unchanged.
-4. A request without that header receives a generated `X-Request-ID`.
-5. A test-only route on a second `create_app()` instance raises `RuntimeError`; the response is HTTP 500 with `Error interno del servidor` and does not include the exception text.
-6. A test-only category route uses `handle_db_exceptions` so a PostgreSQL unique violation returns HTTP 409 and the same session can still run `SELECT 1`.
+This branch keeps the ordinary Pytest unit tests in `tests/test_exception_handlers.py` and the database integration tests in `tests/test_db_exceptions.py`. It no longer contains the `.feature` files, step definitions, BDD registration module, BDD-only `tests/conftest.py`, or the `pytest-bdd` dependency.
 
-Scenarios 1–5 call the real factory. Their fixture replaces only `ensure_reference_data_on_startup` so those HTTP checks do not open a database connection. Scenario 6 does not use that replacement.
+The six scenarios were verified against the integrated application on `test/gherkin-bdd`. `python -m pytest -v tests/test_sgr_49_bdd.py` reported 6 passed.
 
-`python -m pytest -v tests/test_sgr_49_bdd.py` collected 6 scenarios: 5 passed, 1 failed, and the failed scenario also errored during teardown. The failure is scenario 6: both category inserts returned HTTP 500 because the connection to `localhost:5433` timed out (`psycopg.errors.ConnectionTimeout`). The scenario was not replaced with a mock.
+After SGR-49 is merged into `dev`, synchronize `test/gherkin-bdd` onto that updated `dev` and confirm the diff contains only BDD changes before preparing a separate BDD pull request. Do not open that pull request against the current `dev`: the branch diff would still include the SGR-49 implementation. `test/gherkin-bdd` is an ancestor of the extraction commit, so a fast-forward onto the merged `dev` would follow the removal and drop the scenarios. Restore the BDD paths from `test/gherkin-bdd` onto a branch created from the updated `dev`, re-run the six scenarios, and only then open the BDD pull request. That synchronization is not done here. Nothing was pushed.
 
 ## 6. Testing
 
+After the Gherkin suite was removed from this branch:
+
 | Command | Result |
 |---|---|
-| `python -m pytest -v tests/test_exception_handlers.py` | 11 passed |
-| `python -m pytest -v tests/test_db_exceptions.py` | 4 failed |
-| `python -m pytest -v tests/test_sgr_49_bdd.py` | 5 passed, 1 failed, 1 error |
-| `python -m pytest -v` | 16 passed, 5 failed, 1 error, 3 warnings, 90.76s |
+| `python -m pytest -v tests/test_exception_handlers.py` | 11 passed, 3 warnings |
+| `python -m pytest -v tests/test_db_exceptions.py` | 4 passed, 3 warnings |
+| `python -m pytest -v` | 15 passed, 3 warnings |
 
-Every failure and the teardown error is `sqlalchemy.exc.OperationalError` caused by `psycopg.errors.ConnectionTimeout` to `localhost:5433` (`::1` and `127.0.0.1`). PostgreSQL is listening on port 5432, and authentication for `sgr_user` on that port was rejected. The application settings used by the tests point at port 5433, where nothing accepted a connection. `alembic current` was not completed for the same reason. `alembic heads` was run and shows one head: `3190ffa0880e`.
-
-There is no menu test module on `dev`. Menu registration was checked through the OpenAPI paths of `create_app()` (`/menus`, `/menus/{menu_id}`, `/menus/{menu_id}/availability`). The lifespan test that contains those assertions then failed on the same database timeout, not on a missing path.
+The full suite collects 15 tests and does not include the six Gherkin scenarios. Menu registration remains covered by the OpenAPI path assertions in `tests/test_db_exceptions.py` (`/menus`, `/menus/{menu_id}`, `/menus/{menu_id}/availability`). On `test/gherkin-bdd`, `python -m pytest -v tests/test_sgr_49_bdd.py` reported 6 passed, 3 warnings.
 
 ## 7. Commits
 
@@ -63,13 +57,14 @@ There is no menu test module on `dev`. Menu registration was checked through the
 |---|---|---|
 | `dd47888faef0a5c63290ae14bd495000a08470ee` | `chore(integration): merge latest dev into feat/errors-handler` | Merge `ff10751` and resolve the two conflicts. |
 | `f1c2d8d2685b1ac27fc8ed32f46490fc34acd6fd` | `test(api): confirm menu routes stay registered after dev merge` | OpenAPI assertion for the menu routes. |
-| `aece58d4b55ad17b74242334219b7bf52456e002` | `test(bdd): add focused Gherkin scenarios for SGR-49` | Six Pytest-BDD scenarios and `pytest-bdd==9.0.1`. |
+| `aece58d4b55ad17b74242334219b7bf52456e002` | `test(bdd): add focused Gherkin scenarios for SGR-49` | Added the six scenarios. The files stay on `test/gherkin-bdd` and are removed from this branch by the extraction commit. |
+| `f2b4316f8a2934845c196bf3697f95deeefe6581` | `chore(test): extract Gherkin BDD suite from SGR-49` | Remove the BDD files and `pytest-bdd==9.0.1` from this branch. |
 
 This file was added in `082e1b13d090d5026a57731890b80c6fd2d7b90e`, `docs(integration): document dev synchronization and SGR-49 BDD coverage`.
 
 ## 8. Remaining limitations
 
-- Database exception translation, rollback against PostgreSQL, lifespan reference-data seeding, and `alembic current` were not verified here. The configured database at `localhost:5433` did not accept connections.
-- Applying migrations to a database was not run. The revision graph was inspected only.
+- Applying migrations and `alembic current` were not run during the extraction. The revision graph was inspected earlier and has one head, `3190ffa0880e`.
 - `menu_service` was left on its existing commit style. A uniqueness or foreign-key failure there is handled by the global SQLAlchemy handler, which translates the error and does not call `session.rollback()` itself.
-- The four pre-existing uncommitted architecture-comparison documents were stashed before the merge and restored afterwards. They are not part of this synchronization.
+- The four pre-existing uncommitted architecture-comparison documents stay unstaged. They are not part of this synchronization or the Gherkin extraction.
+- The BDD pull request waits until SGR-49 is on `dev` and `test/gherkin-bdd` has been synchronized so its diff is only the BDD suite.
