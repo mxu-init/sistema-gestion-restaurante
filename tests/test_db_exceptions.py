@@ -325,6 +325,11 @@ def test_create_app_lifespan_reference_data_and_dev_endpoints(
 ) -> None:
     """d. Verifica que create_app() preserve el lifespan de dev, datos de referencia, favicon, health y routers."""
     application = create_app()
+    openapi_paths = application.openapi()["paths"]
+    assert "/menus" in openapi_paths
+    assert "/menus/{menu_id}" in openapi_paths
+    assert "/menus/{menu_id}/availability" in openapi_paths
+
     with TestClient(application, raise_server_exceptions=False) as app_client:
         # 1. Endpoints de estado y estáticos de dev
         health_resp = app_client.get("/health")
