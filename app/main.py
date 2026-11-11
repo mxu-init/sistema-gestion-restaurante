@@ -17,7 +17,7 @@ from app.api import (
     menu_routes,
     test_routes,
 )
-from app.services import reference_service
+from app.services import reference_service, user_service
 from app.core.exceptions import NotFoundError, ConflictError
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -26,6 +26,7 @@ STATIC_DIR = BASE_DIR / "static"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     reference_service.ensure_reference_data_on_startup()
+    user_service.ensure_super_admin_on_startup()
     yield
 
 app = FastAPI(
