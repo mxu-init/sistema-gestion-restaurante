@@ -12,16 +12,16 @@ class Settings (BaseSettings):
     DB_PASSWORD:str
     DRIVER_NAME:str
 
-    SECRET_KEY:str
-    ACCESS_TOKEN_EXPIRE_MINUTES:int = 60
-    JWT_ALGORITHM:str = "HS256"
+    SECRET_KEY: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    JWT_ALGORITHM: str = "HS256"
 
     # Bootstrap del super admin (vacia = no se crea en el arranque)
     SUPER_ADMIN_NAME: str = ""
     SUPER_ADMIN_EMAIL: str = ""
     SUPER_ADMIN_PASSWORD: str = ""
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
     def database_url(self) -> str:
