@@ -5,6 +5,10 @@ from app.models import UserModel
 
 
 def ensure_super_admin_on_startup() -> None:
+    # Sin email configurado no hay bootstrap que hacer
+    if not settings.SUPER_ADMIN_EMAIL:
+        return
+
     db = session_local()
     try:
         existing_user = db.query(UserModel).filter(

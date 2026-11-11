@@ -10,7 +10,7 @@ def authenticate_user(db: Session, email: str, password: str) -> UserModel:
 
     if (
         not user
-        or not verify_password(password, user.hashed_password)
+        or not verify_password(password, user.password_hash)
         or not user.is_active
     ):
         raise HTTPException(

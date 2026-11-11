@@ -4,9 +4,9 @@ from app.core.security import get_password_hash
 from app.models import CategoryModel, DishModel, UserModel
 
 INITIAL_USERS = [
-    {"email": "admin@restaurante.com", "password": "admin123", "role": "admin", "is_active": True},
-    {"email": "mesero@restaurante.com", "password": "mesero123", "role": "mesero", "is_active": True},
-    {"email": "inactivo@restaurante.com", "password": "inactivo123", "role": "mesero", "is_active": False},
+    {"name": "Administrador", "email": "admin@restaurante.com", "password": "admin123", "role": "admin", "is_active": True},
+    {"name": "Mesero", "email": "mesero@restaurante.com", "password": "mesero123", "role": "mesero", "is_active": True},
+    {"name": "Mesero Inactivo", "email": "inactivo@restaurante.com", "password": "inactivo123", "role": "mesero", "is_active": False},
 ]
 
 def run_seed():
@@ -17,8 +17,9 @@ def run_seed():
             if not user_exists:
                 db.add(
                     UserModel(
+                        name=user_item["name"],
                         email=user_item["email"],
-                        hashed_password=get_password_hash(user_item["password"]),
+                        password_hash=get_password_hash(user_item["password"]),
                         role=user_item["role"],
                         is_active=user_item["is_active"],
                     )
