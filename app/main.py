@@ -5,10 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request, status
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import text
-
 from app.core.config import settings
-from app.core.database_connection import engine
 from app.api import (
     allergen_routes,
     auth_routes,
@@ -60,22 +57,4 @@ def favicon():
     favicon_path = STATIC_DIR / "favicon.ico"
     return FileResponse(favicon_path)
 
-@app.get(
-    "/health",
-    tags=["Salud"],
-    summary="Estado del servicio",
-    description="Confirma que el servicio está en línea.",
-)
-def health():
-    return {"status": "ok"}
 
-@app.get(
-    "/health/db",
-    tags=["Salud"],
-    summary="Verificar conexión a la base de datos",
-    description="Ejecuta una consulta simple para comprobar la conexión con PostgreSQL.",
-)
-def check_database():
-    with engine.connect() as connection:
-        connection.execute(text("SELECT 1"))
-    return {"message": "Conexión a la base de datos exitosa"}
