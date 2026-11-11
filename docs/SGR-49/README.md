@@ -24,6 +24,33 @@ flowchart LR
 - `ConflictError(AppError)`: Conflicto con el estado actual o duplicado (`409`).
 - `PermissionDeniedError(AppError)`: Falta de permisos para la operación (`403`).
 
+## Ejemplo en un servicio: `NotFoundError`
+
+En `app/services/menu_service.py`, `fetch_menu_by_id` comprueba si el menú existe antes de devolverlo. Si la consulta no encuentra el recurso, lanza `NotFoundError`. El manejador centralizado `app_error_handler` (registrado en `register_exception_handlers`) traduce esa excepción a una respuesta HTTP `404` con el formato estándar `{"detail": "..."}`.
+
+```python
+from app.core.exceptions import NotFoundError
+
+def fetch_menu_by_id(db: Session, menu_id: int) -> MenuModel:
+    menu = (
+        db.query(MenuModel)
+        .options(selectinload(MenuModel.dishes))
+        .filter(MenuModel.id == menu_id, MenuModel.deleted_at.is_(None))
+        .first()
+    )
+    if menu is None:
+        raise NotFoundError("El menú no existe")
+    return menu
+```
+
+**Respuesta de la API (`404 Not Found`):**
+
+```json
+{
+  "detail": "El menú no existe"
+}
+```
+
 ## Códigos de Estado HTTP Soportados
 
 | Código HTTP | Origen | Comportamiento |
