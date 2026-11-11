@@ -8,7 +8,12 @@ from app.services import dish_service, image_service, allergen_service
 
 router = APIRouter(prefix="/dishes", tags=["Platos"])
 
-@router.get("/", response_model=List[DishResponse])
+@router.get(
+    "/",
+    response_model=List[DishResponse],
+    summary="Listar platos",
+    description="Devuelve los platos activos con paginación y filtros opcionales por categoría y disponibilidad.",
+)
 def read_dishes(
     skip: int = Query(0, ge=0, description="Saltarse X registros:"),
     limit: int = Query(100, ge=1, le=200, description="Límite de registros por consulta:"),
@@ -21,7 +26,12 @@ def read_dishes(
         category_id=category_id, is_available=is_available,
     )
 
-@router.get("/{dish_id}", response_model=DishResponse)
+@router.get(
+    "/{dish_id}",
+    response_model=DishResponse,
+    summary="Consultar un plato",
+    description="Devuelve un plato por su id.",
+)
 def read_dish_by_id(dish_id: int, db: Session = Depends(get_db)):
     db_dish = dish_service.get_dish_by_id(db, dish_id=dish_id)
     if not db_dish:
@@ -31,7 +41,13 @@ def read_dish_by_id(dish_id: int, db: Session = Depends(get_db)):
         )
     return db_dish
 
-@router.post("/", response_model=DishResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=DishResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear un plato",
+    description="Registra un plato nuevo con su categoría, precio, alérgenos e imagen opcional (archivo o URL).",
+)
 def create_dish(
     name: str = Form(..., min_length=1),
     description: Optional[str] = Form(None),
@@ -119,7 +135,12 @@ def create_dish(
     )
     return dish_service.create_dish(db, dish_data, image, allergen_ids=allergen_ids)
 
-@router.put("/{dish_id}", response_model=DishResponse)
+@router.put(
+    "/{dish_id}",
+    response_model=DishResponse,
+    summary="Actualizar un plato",
+    description="Modifica los datos de un plato existente: nombre, descripción, precio, categoría, disponibilidad, alérgenos e imagen.",
+)
 def update_dish(dish_id: int, dish_data: DishUpdate, db: Session = Depends(get_db)):
     db_dish = dish_service.get_dish_by_id(db, dish_id=dish_id)
     if not db_dish:
@@ -179,7 +200,12 @@ def update_dish(dish_id: int, dish_data: DishUpdate, db: Session = Depends(get_d
     db_dish = dish_service.update_dish(db=db, dish_id=dish_id, dish_data=dish_data)
     return db_dish
 
-@router.delete("/{dish_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{dish_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Eliminar un plato",
+    description="Realiza un borrado lógico del plato estableciendo deleted_at. El plato se puede restaurar después.",
+)
 def delete_dish(dish_id: int, db: Session = Depends(get_db)):
     db_dish = dish_service.get_dish_by_id_including_deleted(db, dish_id)
     if not db_dish:
@@ -195,7 +221,12 @@ def delete_dish(dish_id: int, db: Session = Depends(get_db)):
     dish_service.soft_delete_dish(db, dish_id)
     return None
 
-@router.post("/{dish_id}/restore", response_model=DishResponse)
+@router.post(
+    "/{dish_id}/restore",
+    response_model=DishResponse,
+    summary="Restaurar un plato",
+    description="Reactiva un plato eliminado lógicamente, siempre que no exista otro plato activo con el mismo nombre en su categoría.",
+)
 def restore_dish(dish_id: int, db: Session = Depends(get_db)):
     db_dish = dish_service.get_dish_by_id_including_deleted(db, dish_id)
     if not db_dish:

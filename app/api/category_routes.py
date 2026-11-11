@@ -8,11 +8,21 @@ from app.services import category_service
 
 router = APIRouter(prefix="/categories", tags=["Categorías"])
 
-@router.get("/", response_model=List[CategoryResponse])
+@router.get(
+    "/",
+    response_model=List[CategoryResponse],
+    summary="Listar categorías",
+    description="Devuelve todas las categorías registradas.",
+)
 def read_categories(db: Session = Depends(get_db)):
     return category_service.get_categories(db=db)
 
-@router.get("/{category_id}/dishes", response_model=CategoryWithDishesResponse)
+@router.get(
+    "/{category_id}/dishes",
+    response_model=CategoryWithDishesResponse,
+    summary="Listar categoría con sus platos",
+    description="Devuelve una categoría por su id junto con los platos asociados.",
+)
 def read_category_with_dishes(category_id: int, db: Session = Depends(get_db)):
     category = category_service.get_category_by_id(db=db, category_id=category_id)
     if not category:
@@ -22,7 +32,13 @@ def read_category_with_dishes(category_id: int, db: Session = Depends(get_db)):
         )
     return category
 
-@router.post("/", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=CategoryResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear categoría",
+    description="Registra una categoría nueva. El nombre debe ser único.",
+)
 def create_category(category_data: CategoryCreate, db: Session = Depends(get_db)):
     category_data.name = category_data.name.strip()
     if not category_data.name:
@@ -40,7 +56,12 @@ def create_category(category_data: CategoryCreate, db: Session = Depends(get_db)
 
     return category_service.create_category(db=db, category_data=category_data)
 
-@router.put("/{category_id}", response_model=CategoryResponse)
+@router.put(
+    "/{category_id}",
+    response_model=CategoryResponse,
+    summary="Actualizar categoría",
+    description="Modifica el nombre de una categoría existente. El nuevo nombre debe ser único.",
+)
 def update_category(category_id: int, category_data: CategoryUpdate, db: Session = Depends(get_db)):
     db_category = category_service.get_category_by_id(db=db, category_id=category_id)
     if not db_category:
@@ -70,7 +91,12 @@ def update_category(category_id: int, category_data: CategoryUpdate, db: Session
 
     return category_service.update_category(db=db, category_id=category_id, category_data=category_data)
 
-@router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{category_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Eliminar categoría",
+    description="Elimina una categoría. No se puede eliminar si tiene platos asociados.",
+)
 def delete_category(category_id: int, db: Session = Depends(get_db)):
     db_category = category_service.get_category_by_id(db=db, category_id=category_id)
     if not db_category:

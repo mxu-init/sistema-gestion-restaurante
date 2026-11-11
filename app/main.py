@@ -2,15 +2,19 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request, status
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import text
-
 from app.core.config import settings
-from app.core.database_connection import engine
-from app.api import test_routes, dish_routes, category_routes, allergen_routes, menu_routes
-from app.services import reference_service
+from app.api import (
+    allergen_routes,
+    auth_routes,
+    category_routes,
+    dish_routes,
+    menu_routes,
+    test_routes,
+)
+from app.services import reference_service, user_service
 from app.core.exceptions import register_exception_handlers
 from app.schemas.errors import COMMON_ERROR_RESPONSES
 
@@ -20,6 +24,7 @@ STATIC_DIR = BASE_DIR / "static"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     reference_service.ensure_reference_data_on_startup()
+    user_service.ensure_super_admin_on_startup()
     yield
 
 app = FastAPI(
@@ -39,9 +44,10 @@ app.include_router(test_routes.router)
 app.include_router(dish_routes.router)
 app.include_router(category_routes.router)
 app.include_router(allergen_routes.router)
+app.include_router(auth_routes.router)
 app.include_router(menu_routes.router)
 
-@app.get("/")
+@app.get("/", summary="Inicio de la API", description="Mensaje de bienvenida de la API.")
 async def root():
     return "API Template"
 
@@ -50,3 +56,5 @@ async def root():
 def favicon():
     favicon_path = STATIC_DIR / "favicon.ico"
     return FileResponse(favicon_path)
+
+

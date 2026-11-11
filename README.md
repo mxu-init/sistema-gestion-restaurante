@@ -83,10 +83,10 @@ Petición Cliente
 ```
 
 ### Reglas Clave de Dominio
-1. **Borrado Lógico (*Soft Delete*):** Platos y menús no se eliminan físicamente; registran una marca temporal `deleted_at`. Toda consulta del sistema omite de forma transparente los elementos dados de baja.
-2. **Desactivación vs. Eliminación:** Modificar `is_available` es una acción operativa reversible (ej. falta momentánea de un ingrediente o producto). La eliminación lógica marca el registro como retirado de forma permanente.
+1. **Borrado Lógico (*Soft Delete*):** Platos y menús nunca se eliminan físicamente; registran una marca temporal `deleted_at`. Los usuarios nunca se eliminan físicamente tampoco: se desactivan con `is_active = false`, lo que impide iniciar sesión.
+2. **Desactivación vs. Eliminación:** Cambiar `is_available` o `is_active` es una operación operativa reversible (ej. falta puntual de un ingrediente). La eliminación lógica queda reservada con exclusividad al `super_admin`.
 3. **Disponibilidad Computada:** La disponibilidad de un menú no se duplica estáticamente en base de datos; se evalúa dinámicamente según el estado de disponibilidad de cada uno de sus platos asociados.
-4. **Respuestas de Error Uniformes:** Mensajes claros y contextualizados en español con códigos HTTP normalizados (`400` Bad Request, `404` Not Found, `409` Conflict, `422` Unprocessable Entity).
+4. **Respuestas de Error Uniformes:** Errores consistentes en español con códigos HTTP normalizados (`400` Bad Request, `401` Unauthorized, `403` Forbidden, `404` Not Found, `409` Conflict, `422` Unprocessable Entity).
 
 ---
 
@@ -100,40 +100,51 @@ gestion_restaurante/
 │   └── script.py.mako
 ├── app/
 │   ├── api/                     # Rutas FastAPI (APIRouter) y documentación Swagger
+│   │   ├── auth_routes.py       # Login JWT, usuario actual y listado por rol
 │   │   ├── dish_routes.py       # CRUD de platos y asignación de alérgenos
 │   │   ├── category_routes.py   # Endpoints de categorías de la carta
 │   │   ├── allergen_routes.py   # Endpoints de consulta de alérgenos
 │   │   ├── menu_routes.py       # Endpoints de gestión y consulta de menús
 │   │   └── test_routes.py       # Endpoint de healthcheck y plantilla
 │   ├── controllers/             # Orquestación de casos de uso
+│   │   ├── menu_controller.py   # Casos de uso de menús
 │   │   └── test_controller.py
 │   ├── services/                # Lógica de negocio y consultas SQLAlchemy
+│   │   ├── auth_service.py      # Validación de credenciales y estado del usuario
+│   │   ├── user_service.py      # Bootstrap del super admin en el arranque
 │   │   ├── dish_service.py      # Lógica de platos, alérgenos asociados y carga optimizada
 │   │   ├── category_service.py  # Lógica de categorías de la carta
 │   │   ├── allergen_service.py  # Validación y consulta de alérgenos
 │   │   ├── menu_service.py      # Lógica de menús y cálculo de disponibilidad
 │   │   ├── image_service.py     # Manejo de subida y almacenamiento de imágenes
 │   │   └── reference_service.py # Verificación y restauración de datos fijos al arrancar
-│   ├── models/                  # Modelos relacionales ORM (SQLAlchemy)
-│   │   ├── __init__.py          # Registro central de modelos y relaciones
+│   ├── models/                  # Un archivo por tabla (SQLAlchemy)
+│   │   ├── __init__.py          # Registro único de modelos (relaciones entre archivos)
 │   │   ├── category_model.py    # Tabla categories
 │   │   ├── dish_model.py        # Tabla dishes con deleted_at e is_available
 │   │   ├── allergen_model.py    # Tabla allergens
 │   │   ├── dish_allergen_model.py # Tabla intermedia dish_allergens
-│   │   └── menu_model.py        # Tabla menus y relaciones con platos
+│   │   ├── user_model.py        # Tabla users
+│   │   ├── menu_model.py        # Tabla menus y relaciones con platos
+│   │   └── test_model.py        # Tabla test (plantilla)
 │   ├── schemas/                 # Esquemas Pydantic (Create, Update, Response)
+│   │   ├── auth_schema.py       # Token y datos de usuario
+│   │   ├── user_schema.py       # Perfil de usuario (name, roles, created_at)
 │   │   ├── dish_schema.py
 │   │   ├── category_schema.py
 │   │   ├── allergen_schema.py
-│   │   └── menu_schema.py
+│   │   ├── menu_schema.py
+│   │   └── test_schema.py
 │   ├── core/                    # Configuración global y conexiones
 │   │   ├── config.py            # Variables de entorno y ajustes generales
 │   │   ├── database_connection.py # Engine, sesión y get_db
+│   │   ├── security.py          # Hash de contraseñas (Argon2) y creación/lectura de JWT
+│   │   ├── auth_dependencies.py # Usuario actual y control de roles jerárquicos
 │   │   ├── exceptions.py        # Excepciones de dominio (NotFoundError, ConflictError)
 │   │   └── reference_data.py    # Categorías base y 14 alérgenos UE (fuente única)
 │   └── main.py                  # Instancia FastAPI, lifespan y registro de routers
 ├── scripts/                     # Scripts de utilidad y validación
-│   ├── seed_data.py             # Carga opcional de platos de ejemplo
+│   ├── seed_data.py             # Carga opcional: 15 platos y usuarios de prueba
 │   └── check_commit_msg.py      # Verificador de Conventional Commits
 ├── tests/                       # Pruebas automáticas y escenarios BDD
 │   ├── conftest.py              # Fixtures y base de datos SQLite en memoria
@@ -195,6 +206,10 @@ DB_NAME=restaurante_erp_db
 DB_USER=postgres
 DB_PASSWORD=tu_password
 DRIVER_NAME=postgresql+psycopg
+
+# Autenticacion JWT
+SECRET_KEY=genera_una_clave_secreta_larga
+ACCESS_TOKEN_EXPIRE_MINUTES=60
 ```
 
 ### 6. Aplicar Migraciones y Cargar Datos Fijos
@@ -203,10 +218,22 @@ alembic upgrade head
 ```
 Este comando crea el esquema relacional e inserta los **datos fijos**: las 5 categorías base (*Entrantes, Primeros, Segundos, Postres, Bebidas*) y los **14 alérgenos de declaración obligatoria** de la UE. Además, el servicio de referencia comprueba su existencia en cada arranque del servidor.
 
-*(Opcional)* Carga de platos de ejemplo:
+Carga opcional de los 15 platos de ejemplo y de los usuarios de prueba:
 ```bash
 python -m scripts.seed_data
 ```
+
+Usuarios creados por el seed:
+
+| Email | Contraseña | Rol | Activo |
+| :--- | :--- | :--- | :--- |
+| `admin@restaurante.com` | `admin123` | admin | sí |
+| `mesero@restaurante.com` | `mesero123` | mesero | sí |
+| `inactivo@restaurante.com` | `inactivo123` | mesero | no |
+
+> ⚠️ **Solo entorno de desarrollo:** estos usuarios son ficticios y los crea la
+> seed opcional. Nunca ejecutes `scripts/seed_data.py` en producción y cambia
+> todas las contraseñas antes de cualquier despliegue real.
 
 ### 7. Iniciar el Servidor de Desarrollo
 ```bash
@@ -252,6 +279,16 @@ Ejecutar únicamente los escenarios de menús o de platos:
 pytest tests/test_menus_bdd.py -v
 pytest tests/test_dishes_bdd.py -v
 ```
+
+### Endpoints de autenticación
+
+| Método | Ruta | Acceso | Descripción |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/auth/token` | Público | Devuelve el JWT (el email se envía en el campo `username`) |
+| `GET` | `/auth/me` | Cualquier usuario autenticado | Devuelve los datos del usuario del token |
+| `GET` | `/auth/users` | Solo rol `admin` | Listado de usuarios del sistema |
+
+Credenciales incorrectas, email inexistente o usuario desactivado responden `401` con el mismo mensaje en español: `Credenciales incorrectas`. Un token sin los permisos del rol requerido responde `403`.
 
 ---
 
