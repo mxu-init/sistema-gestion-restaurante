@@ -18,7 +18,8 @@ from app.api import (
     test_routes,
 )
 from app.services import reference_service, user_service
-from app.core.exceptions import NotFoundError, ConflictError
+from app.core.exceptions import register_exception_handlers
+from app.schemas.errors import COMMON_ERROR_RESPONSES
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -34,7 +35,10 @@ app = FastAPI(
     version=settings.APP_VERSION,
     description=settings.APP_DESCRIPTION,
     lifespan=lifespan,
+    responses=COMMON_ERROR_RESPONSES,
 )
+
+register_exception_handlers(app)
 
 os.makedirs(STATIC_DIR / "uploads", exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -45,22 +49,6 @@ app.include_router(category_routes.router)
 app.include_router(allergen_routes.router)
 app.include_router(auth_routes.router)
 app.include_router(menu_routes.router)
-
-
-@app.exception_handler(NotFoundError)
-def handle_not_found_error(request: Request, exc: NotFoundError):
-    return JSONResponse(
-        status_code=status.HTTP_404_NOT_FOUND,
-        content={"detail": exc.message},
-    )
-
-
-@app.exception_handler(ConflictError)
-def handle_conflict_error(request: Request, exc: ConflictError):
-    return JSONResponse(
-        status_code=status.HTTP_409_CONFLICT,
-        content={"detail": exc.message},
-    )
 
 @app.get("/", summary="Inicio de la API", description="Mensaje de bienvenida de la API.")
 async def root():
