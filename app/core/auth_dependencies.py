@@ -9,6 +9,15 @@ from app.models.user_model import UserModel
 # Habilita el boton Authorize de Swagger y lee el header Authorization
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
+# Jerarquia de roles: un rol superior hereda los permisos de los inferiores
+ROLE_HIERARCHY = {
+    "super_admin": 5,
+    "admin": 4,
+    "manager": 3,
+    "staff": 2,
+    "mesero": 1,
+}
+
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -38,10 +47,17 @@ def get_current_user(
 
 def require_role(*roles: str):
     def dependency(current_user: UserModel = Depends(get_current_user)) -> UserModel:
-        if current_user.role not in roles:
+        user_level = ROLE_HIERARCHY.get(current_user.role, -1)
+        requested_levels = [
+            ROLE_HIERARCHY[role] for role in roles if role in ROLE_HIERARCHY
+        ]
+        allowed = current_user.role in roles or (
+            bool(requested_levels) and user_level >= min(requested_levels)
+        )
+        if not allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No tiene permisos para realizar esta operación",
+                detail="No tiene permisos para realizar esta operacion",
             )
         return current_user
 
