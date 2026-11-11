@@ -1,4 +1,5 @@
 # Entornos virtuales de Python
+env
 env/
 venv/
 .venv/
@@ -59,3 +60,15 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 .DS_Store
+
+# Notas temporales y especificaciones internas
+tarrea-errores-soul.txt
+sgr-49-*.md
+antigravity*.txt
+result*.txt
+
+# Archivos multimedia y documentación de presentación interna
+*.mp4
+docs/*
+!docs/architecture/
+!docs/architecture/**

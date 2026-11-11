@@ -231,6 +231,70 @@ Una vez iniciado el servidor, accede a la documentación interactiva autogenerad
 
 ---
 
+## Manejo Global de Excepciones y Errores (SGR-49)
+
+La aplicación implementa una arquitectura centralizada de manejo de errores (`Transport-Agnostic`) que unifica el formato de respuesta HTTP, traduce errores de validación de Pydantic v2 y de PostgreSQL (`SQLSTATE`) al español, y evita filtraciones de trazas internas o datos sensibles.
+
+### 1. Contrato estandarizado de respuesta (`ErrorResponse`)
+
+Todas las respuestas de error (`4xx` y `5xx`, incluidas las validaciones `422`) devuelven un único esquema JSON estricto definido en [`app/schemas/errors.py`](app/schemas/errors.py):
+
+```json
+{
+  "detail": "Error en el campo 'nombre': El campo es obligatorio"
+}
+```
+
+Además, la generación del esquema OpenAPI 3.1 en [`app/main.py`](app/main.py) (`configure_openapi`) reemplaza automáticamente el `HTTPValidationError` por defecto de FastAPI por `#/components/schemas/ErrorResponse`.
+
+### 2. Jerarquía de Excepciones de Dominio
+
+Los servicios y casos de uso deben lanzar excepciones de dominio definidas en [`app/core/exceptions.py`](app/core/exceptions.py) (sin acoplarse a `fastapi.HTTPException`). Los manejadores globales en [`app/core/handlers.py`](app/core/handlers.py) las traducen al código de estado HTTP correspondiente:
+
+| Excepción de Dominio | Código HTTP | Uso principal |
+| --- | --- | --- |
+| `NotFoundError` | `404 Not Found` | Recurso o entidad no encontrada |
+| `ConflictError` | `409 Conflict` | Duplicados (`UNIQUE`) o conflicto de estado |
+| `PermissionDeniedError` | `403 Forbidden` | Permisos insuficientes para la operación |
+| `DomainValidationError` | `422 Unprocessable Content` | Reglas de negocio, claves foráneas (`FK`) o `CHECK` |
+| `DatabaseRetryableError` | `503 Service Unavailable` | Deadlocks, timeouts o fallos transitorios de conexión |
+| `InfrastructureError` | `500 Internal Server Error` | Fallos internos de infraestructura o configuración |
+
+Ejemplo de uso en la capa de servicio:
+
+```python
+from app.core.exceptions import ConflictError, NotFoundError
+
+if not mesa:
+    raise NotFoundError("La mesa solicitada no existe.")
+```
+
+### 3. Traducción de errores SQLAlchemy / PostgreSQL y Rollback automático
+
+El módulo [`app/core/error_translations.py`](app/core/error_translations.py) provee los gestores de contexto `handle_db_exceptions` (síncrono) y `handle_async_db_exceptions` (asíncrono) compatibles con `psycopg` v3 y `asyncpg`. Garantizan la ejecución de `session.rollback()` ante cualquier fallo y convierten códigos `SQLSTATE` (`23505`, `23503`, `23502`, `23514`, `40001`, `40P01`, etc.) en excepciones de dominio legibles en español:
+
+```python
+from app.core.error_translations import handle_db_exceptions
+
+with handle_db_exceptions(session):
+    session.add(nuevo_registro)
+    session.commit()
+```
+
+### 4. Trazabilidad (`X-Request-ID`) y Logging Estructurado
+
+En [`app/core/logging_config.py`](app/core/logging_config.py):
+* **`CorrelationIdMiddleware`** (Pure ASGI): Lee o genera un identificador único en la cabecera `X-Request-ID` de cada petición/respuesta y lo propaga mediante `ContextVar` hacia todos los registros de log.
+* **`redact_sensitive_data`**: Enmascara automáticamente contraseñas, tokens, claves API (`secret`, `password`, `token`, `authorization`) y cadenas de conexión DSN con `[REDACTED]` antes de escribir logs en formato JSON.
+
+### 5. Ejecutar pruebas del sistema de errores
+
+```bash
+pytest tests/test_exception_handlers.py tests/test_db_exceptions.py
+```
+
+---
+
 ## 🛡️ Flujo de Contribución y Guía de Commits
 
 Para preservar un historial de Git limpio y profesional, el repositorio implementa un hook de [pre-commit](https://pre-commit.com/) que valida el estándar **Conventional Commits**:
