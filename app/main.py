@@ -15,6 +15,7 @@ from app.api import (
     allergen_routes,
     category_routes,
     dish_routes,
+    menu_routes,
     routes,
     test_routes,
 )
@@ -110,6 +111,7 @@ def create_app() -> FastAPI:
     application.include_router(dish_routes.router)
     application.include_router(category_routes.router)
     application.include_router(allergen_routes.router)
+    application.include_router(menu_routes.router)
     application.include_router(routes.router)
 
     @application.get("/")
