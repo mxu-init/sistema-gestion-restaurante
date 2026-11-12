@@ -248,9 +248,6 @@ Una vez iniciado el servidor, accede a los exploradores interactivos autogenerad
 
 - **Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs)
 - **ReDoc:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
-- **Comprobación de Estado (Health):** [http://localhost:8000/health](http://localhost:8000/health)
-- **Health Check de Base de Datos:** [http://localhost:8000/health/db](http://localhost:8000/health/db)
-
 ---
 
 ## 🧪 Pruebas Automáticas y Escenarios BDD
