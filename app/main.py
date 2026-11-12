@@ -40,7 +40,6 @@ register_exception_handlers(app)
 os.makedirs(STATIC_DIR / "uploads", exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-app.include_router(test_routes.router)
 app.include_router(dish_routes.router)
 app.include_router(category_routes.router)
 app.include_router(allergen_routes.router)
